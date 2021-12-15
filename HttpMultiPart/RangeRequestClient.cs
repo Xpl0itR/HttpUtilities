@@ -19,17 +19,12 @@ namespace HttpMultiPart;
 /// </summary>
 public class RangeRequestClient : IDisposable
 {
-    private readonly HttpMessageInvoker _httpMessageInvoker;
+    private readonly EntityTagHeaderValue? _eTag;
+    private readonly HttpMessageInvoker    _httpMessageInvoker;
+    private readonly Uri                   _uri;
 
-    private EntityTagHeaderValue? _eTag;
-    private Uri?                  _uri;
-
-    /// <summary>
-    ///     Initializes a new instance of the <see cref="RangeRequestClient" /> class.
-    /// </summary>
-    /// <param name="httpMessageInvoker">HTTP message invoker used to send requests.</param>
-    public RangeRequestClient(HttpMessageInvoker httpMessageInvoker) =>
-        _httpMessageInvoker = httpMessageInvoker;
+    private RangeRequestClient(HttpMessageInvoker httpMessageInvoker, Uri uri, EntityTagHeaderValue? eTag, long? contentLength) =>
+        (_httpMessageInvoker, _uri, _eTag, ContentLength) = (httpMessageInvoker, uri, eTag, contentLength);
 
     /// <summary>
     ///     Gets the value of the Content-Length content header of the requested resource.
@@ -43,45 +38,10 @@ public class RangeRequestClient : IDisposable
     /// <summary>
     ///     TODO: write summary
     /// </summary>
-    /// <param name="url">Uniform Resource Locator of the resource to be requested.</param>
-    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
-    /// <exception cref="NotSupportedException">The requested resource does not support partial requests.</exception>
-    public Task Initialize(string url, CancellationToken cancellationToken) =>
-        Initialize(new Uri(url, UriKind.RelativeOrAbsolute), cancellationToken);
-
-    /// <summary>
-    ///     TODO: write summary
-    /// </summary>
-    /// <param name="uri">Uniform Resource Identifier of the resource to be requested.</param>
-    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
-    /// <exception cref="NotSupportedException">The requested resource does not support partial requests.</exception>
-    public async Task Initialize(Uri uri, CancellationToken cancellationToken)
-    {
-        HttpRequestMessage  request  = new(HttpMethod.Head, uri);
-        HttpResponseMessage response = await _httpMessageInvoker.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        if (!response.Headers.AcceptRanges.Contains("bytes"))
-        {
-            throw new NotSupportedException("The requested resource does not support partial requests.");
-        }
-
-        _uri          = uri;
-        _eTag         = response.Headers.ETag;
-        ContentLength = response.Content.Headers.ContentLength;
-    }
-
-    /// <summary>
-    ///     TODO: write summary
-    /// </summary>
     /// <param name="offset">A zero-based byte offset indicating the beginning of the requested range.</param>
     /// <param name="length">The number of bytes after the offset to request from the resource.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A <see cref="Stream" /> over the requested section of the resource.</returns>
-    /// <exception cref="MethodAccessException">
-    ///     <see cref="GetRange" /> was called before
-    ///     <see cref="Initialize(Uri,CancellationToken)" />
-    /// </exception>
     public Task<Stream> GetSection(long offset, long length, CancellationToken cancellationToken) =>
         GetRange(offset, offset + length - 1, cancellationToken);
 
@@ -99,17 +59,8 @@ public class RangeRequestClient : IDisposable
     /// </param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A <see cref="Stream" /> over the requested section of the resource.</returns>
-    /// <exception cref="MethodAccessException">
-    ///     <see cref="GetRange" /> was called before
-    ///     <see cref="Initialize(Uri,CancellationToken)" />
-    /// </exception>
     public async Task<Stream> GetRange(long? rangeStart, long? rangeEnd, CancellationToken cancellationToken)
     {
-        if (_uri == null)
-        {
-            throw new MethodAccessException("Method was called before Initialize.");
-        }
-
         HttpRequestMessage request = new(HttpMethod.Get, _uri);
         request.Headers.Range = new RangeHeaderValue(rangeStart, rangeEnd);
 
@@ -119,7 +70,13 @@ public class RangeRequestClient : IDisposable
         }
 
         HttpResponseMessage response = await _httpMessageInvoker.SendAsync(request, cancellationToken);
-        EnsureStatusCode(response, HttpStatusCode.PartialContent);
+        if (response.StatusCode != HttpStatusCode.PartialContent)
+        {
+            throw new HttpRequestException(
+                $"Response body status code was expected to be {HttpStatusCode.PartialContent} but was {response.StatusCode} instead.",
+                null,
+                response.StatusCode);
+        }
 
         ContentLength ??= response.Content.Headers.ContentRange?.Length;
         long?  sectionLength = response.Content.Headers.ContentLength;
@@ -128,11 +85,29 @@ public class RangeRequestClient : IDisposable
         return new LengthStream(sectionStream, sectionLength);
     }
 
-    private static void EnsureStatusCode(HttpResponseMessage response, HttpStatusCode statusCode)
+    /// <inheritdoc cref="New(HttpMessageInvoker, Uri, CancellationToken)" />
+    public static Task<RangeRequestClient> New(HttpMessageInvoker httpMessageInvoker, string uri, CancellationToken cancellationToken) =>
+        New(httpMessageInvoker, new Uri(uri, UriKind.RelativeOrAbsolute), cancellationToken);
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="RangeRequestClient" /> class.
+    /// </summary>
+    /// <param name="httpMessageInvoker">HTTP message invoker used to send requests.</param>
+    /// <param name="uri">Uniform Resource Identifier of the resource to be requested.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>An instance of the <see cref="RangeRequestClient" /> class</returns>
+    /// <exception cref="NotSupportedException">The requested resource does not support partial requests.</exception>
+    public static async Task<RangeRequestClient> New(HttpMessageInvoker httpMessageInvoker, Uri uri, CancellationToken cancellationToken)
     {
-        if (response.StatusCode != statusCode)
+        HttpRequestMessage  request  = new(HttpMethod.Head, uri);
+        HttpResponseMessage response = await httpMessageInvoker.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        if (!response.Headers.AcceptRanges.Contains("bytes"))
         {
-            throw new HttpRequestException($"Response body status code was expected to be {statusCode} but was {response.StatusCode} instead.", null, response.StatusCode);
+            throw new NotSupportedException("The requested resource does not support partial requests.");
         }
+
+        return new RangeRequestClient(httpMessageInvoker, uri, response.Headers.ETag, response.Content.Headers.ContentLength);
     }
 }
