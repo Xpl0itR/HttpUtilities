@@ -14,13 +14,14 @@ namespace HttpMultiPart;
 /// </summary>
 /// <remarks>
 ///     This is intended to be used in cases such as wrapping the stream returned by
-///     <see cref="System.Net.Http.HttpContent.ReadAsStream()"/> whose length cannot be returned by
-///     <see cref="Stream.Length" />, but is known from <see cref="System.Net.Http.Headers.HttpContentHeaders.ContentLength" />.
+///     <see cref="System.Net.Http.HttpContent.ReadAsStream()" /> whose length cannot be returned by
+///     <see cref="Stream.Length" />, but is known from
+///     <see cref="System.Net.Http.Headers.HttpContentHeaders.ContentLength" />.
 /// </remarks>
 public class LengthStream : Stream
 {
-    private readonly Stream _stream;
     private readonly long?  _length;
+    private readonly Stream _stream;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="LengthStream" /> class with
@@ -32,11 +33,8 @@ public class LengthStream : Stream
     ///     If <see langword="null" />, <see cref="Length" />
     ///     will use the value of <see cref="Stream.Length" /> instead of using this value.
     /// </param>
-    public LengthStream(Stream stream, long? length)
-    {
-        _stream = stream;
-        _length = length;
-    }
+    public LengthStream(Stream stream, long? length) =>
+        (_stream, _length) = (stream, length);
 
     /// <summary>Gets a value indicating whether the current stream supports reading.</summary>
     /// <returns>

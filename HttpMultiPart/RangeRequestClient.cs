@@ -21,15 +21,15 @@ public class RangeRequestClient : IDisposable
 {
     private readonly EntityTagHeaderValue? _eTag;
     private readonly HttpMessageInvoker    _httpMessageInvoker;
-    private readonly Uri                   _uri;
+    private readonly Uri?                  _uri;
 
-    private RangeRequestClient(HttpMessageInvoker httpMessageInvoker, Uri uri, EntityTagHeaderValue? eTag, long? contentLength) =>
+    private RangeRequestClient(HttpMessageInvoker httpMessageInvoker, Uri? uri, EntityTagHeaderValue? eTag, long contentLength) =>
         (_httpMessageInvoker, _uri, _eTag, ContentLength) = (httpMessageInvoker, uri, eTag, contentLength);
 
     /// <summary>
     ///     Gets the value of the Content-Length content header of the requested resource.
     /// </summary>
-    public long? ContentLength { get; private set; }
+    public long ContentLength { get; }
 
     /// <inheritdoc />
     public void Dispose() =>
@@ -42,8 +42,15 @@ public class RangeRequestClient : IDisposable
     /// <param name="length">The number of bytes after the offset to request from the resource.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A <see cref="Stream" /> over the requested section of the resource.</returns>
-    public Task<Stream> GetSection(long offset, long length, CancellationToken cancellationToken) =>
-        GetRange(offset, offset + length - 1, cancellationToken);
+    public Task<Stream> GetSection(long offset, long length, CancellationToken cancellationToken)
+    {
+        if (length < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(length));
+        }
+
+        return GetRange(offset, offset + length - 1, cancellationToken);
+    }
 
     /// <summary>
     ///     TODO: write summary
@@ -78,11 +85,12 @@ public class RangeRequestClient : IDisposable
                 response.StatusCode);
         }
 
-        ContentLength ??= response.Content.Headers.ContentRange?.Length;
-        long?  sectionLength = response.Content.Headers.ContentLength;
-        Stream sectionStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        long?  length = response.Content.Headers.ContentLength;
+        Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
 
-        return new LengthStream(sectionStream, sectionLength);
+        return stream is MemoryStream
+            ? stream
+            : new LengthStream(stream, length);
     }
 
     /// <inheritdoc cref="New(HttpMessageInvoker, Uri, CancellationToken)" />
@@ -95,9 +103,8 @@ public class RangeRequestClient : IDisposable
     /// <param name="httpMessageInvoker">HTTP message invoker used to send requests.</param>
     /// <param name="uri">Uniform Resource Identifier of the resource to be requested.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
-    /// <returns>An instance of the <see cref="RangeRequestClient" /> class</returns>
     /// <exception cref="NotSupportedException">The requested resource does not support partial requests.</exception>
-    public static async Task<RangeRequestClient> New(HttpMessageInvoker httpMessageInvoker, Uri uri, CancellationToken cancellationToken)
+    public static async Task<RangeRequestClient> New(HttpMessageInvoker httpMessageInvoker, Uri? uri, CancellationToken cancellationToken)
     {
         HttpRequestMessage  request  = new(HttpMethod.Head, uri);
         HttpResponseMessage response = await httpMessageInvoker.SendAsync(request, cancellationToken);
@@ -108,6 +115,6 @@ public class RangeRequestClient : IDisposable
             throw new NotSupportedException("The requested resource does not support partial requests.");
         }
 
-        return new RangeRequestClient(httpMessageInvoker, uri, response.Headers.ETag, response.Content.Headers.ContentLength);
+        return new RangeRequestClient(httpMessageInvoker, uri, response.Headers.ETag, response.Content.Headers.ContentLength!.Value);
     }
 }
