@@ -14,9 +14,6 @@ using System.Threading.Tasks;
 
 namespace HttpMultiPart;
 
-/// <summary>
-///     TODO: write summary
-/// </summary>
 public class RangeRequestClient : IDisposable
 {
     private readonly EntityTagHeaderValue? _eTag;
@@ -76,7 +73,7 @@ public class RangeRequestClient : IDisposable
             request.Headers.IfMatch.Add(_eTag);
         }
 
-        HttpResponseMessage response = await _httpMessageInvoker.SendAsync(request, cancellationToken);
+        HttpResponseMessage response = await SendAsync(_httpMessageInvoker, request, cancellationToken);
         if (response.StatusCode != HttpStatusCode.PartialContent)
         {
             throw new HttpRequestException(
@@ -107,7 +104,7 @@ public class RangeRequestClient : IDisposable
     public static async Task<RangeRequestClient> New(HttpMessageInvoker httpMessageInvoker, Uri? uri, CancellationToken cancellationToken)
     {
         HttpRequestMessage  request  = new(HttpMethod.Head, uri);
-        HttpResponseMessage response = await httpMessageInvoker.SendAsync(request, cancellationToken);
+        HttpResponseMessage response = await SendAsync(httpMessageInvoker, request, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         if (!response.Headers.AcceptRanges.Contains("bytes"))
@@ -117,4 +114,9 @@ public class RangeRequestClient : IDisposable
 
         return new RangeRequestClient(httpMessageInvoker, uri, response.Headers.ETag, response.Content.Headers.ContentLength!.Value);
     }
+
+    private static Task<HttpResponseMessage> SendAsync(HttpMessageInvoker httpMessageInvoker, HttpRequestMessage request, CancellationToken cancellationToken) =>
+        httpMessageInvoker is HttpClient httpClient
+            ? httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            : httpMessageInvoker.SendAsync(request, cancellationToken);
 }
