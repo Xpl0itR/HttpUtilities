@@ -40,7 +40,7 @@ internal readonly record struct AbridgedEocdRecord
         else
         {
             Eocd64RecordOffset = null;
-            reader.ReadBytes(16);
+            stream.SeekForwards(16);
         }
 
         if (reader.ReadUInt32() != EocdSignature)

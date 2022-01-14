@@ -1,4 +1,4 @@
-﻿// Copyright © 2021 Xpl0itR
+// Copyright © 2021 Xpl0itR
 // 
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -46,15 +46,16 @@ internal record class AbridgedCentralDirectoryEntry
             throw new InvalidDataException("Central Directory header signature mismatch."); //TODO: write better log message
         }
 
-        reader.ReadUInt16(); // version made by
+        reader.BaseStream.SeekForwards(2); // version made by
 
         _minVersionExtract = reader.ReadUInt16();
         _bitFlag           = (BitFlag)reader.ReadUInt16();
         CompressionMethod  = reader.ReadUInt16();
 
-        reader.ReadUInt16(); // last mod file time
-        reader.ReadUInt16(); // last mod file date
-        reader.ReadUInt32(); // crc-32
+        // last mod file time
+        // last mod file date
+        // crc-32
+        reader.BaseStream.SeekForwards(2 + 2 + 4);
 
         CompressedSize   = reader.ReadUInt32();
         UncompressedSize = reader.ReadUInt32();
@@ -65,8 +66,9 @@ internal record class AbridgedCentralDirectoryEntry
 
         _diskNumberStart = reader.ReadUInt16();
 
-        reader.ReadUInt16(); // internal file attributes
-        reader.ReadUInt32(); // external file attributes
+        // internal file attributes
+        // external file attributes
+        reader.BaseStream.SeekForwards(2 + 4);
 
         LocalHeaderOffset = reader.ReadUInt32();
         FileName          = ReadString(reader, fileNameLength);
@@ -102,13 +104,13 @@ internal record class AbridgedCentralDirectoryEntry
             }
             else
             {
-                reader.ReadBytes(extraFieldLength);
+                reader.BaseStream.SeekForwards(extraFieldLength);
             }
 
             extraFieldsLength -= extraFieldLength;
         }
 
-        reader.ReadBytes(fileCommentLength);
+        reader.BaseStream.SeekForwards(fileCommentLength);
     }
 
     internal AbridgedCentralDirectoryEntry ThrowIfInvalid()

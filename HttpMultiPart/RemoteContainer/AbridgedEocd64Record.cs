@@ -26,8 +26,9 @@ internal readonly record struct AbridgedEocd64Record
             throw new InvalidDataException("ZIP64 End Of Central Directory Record signature mismatch."); //TODO: write better log message
         }
 
-        reader.ReadUInt64(); // size of zip64 end of central directory record
-        reader.ReadUInt16(); // version made by
+        // size of zip64 end of central directory record
+        // version made by
+        stream.SeekForwards(8 + 2);
 
         if (reader.ReadUInt16() > 45) // version needed to extract
         {
