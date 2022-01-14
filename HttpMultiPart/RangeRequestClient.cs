@@ -82,12 +82,10 @@ public class RangeRequestClient : IDisposable
                 response.StatusCode);
         }
 
-        long?  length = response.Content.Headers.ContentLength;
         Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-
         return stream is MemoryStream
             ? stream
-            : new LengthStream(stream, length);
+            : new LengthStream(stream, response.Content.Headers.ContentLength);
     }
 
     /// <inheritdoc cref="New(HttpMessageInvoker, Uri, CancellationToken)" />

@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace HttpMultiPart.RemoteZip;
+namespace HttpMultiPart.RemoteContainer;
 
 internal class CentralDirectory : List<AbridgedCentralDirectoryEntry>
 {

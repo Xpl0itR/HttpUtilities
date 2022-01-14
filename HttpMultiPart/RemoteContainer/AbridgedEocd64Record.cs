@@ -6,7 +6,7 @@
 
 using System.IO;
 
-namespace HttpMultiPart.RemoteZip;
+namespace HttpMultiPart.RemoteContainer;
 
 internal readonly record struct AbridgedEocd64Record
 {

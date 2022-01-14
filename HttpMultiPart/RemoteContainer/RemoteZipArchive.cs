@@ -12,7 +12,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace HttpMultiPart.RemoteZip;
+namespace HttpMultiPart.RemoteContainer;
 
 // ZIP standard: https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
 // Supported subset: ISO/IEC 21320-1: https://www.iso.org/standard/60101.html

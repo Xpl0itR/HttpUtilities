@@ -4,7 +4,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace HttpMultiPart;
 
@@ -48,6 +51,9 @@ public class LengthStream : Stream
     /// </returns>
     public override bool CanSeek => _stream.CanSeek;
 
+    /// <inheritdoc />
+    public override bool CanTimeout => _stream.CanTimeout;
+
     /// <summary>Gets a value indicating whether the current stream supports writing.</summary>
     /// <returns>
     ///     <see langword="true" /> if the stream supports writing; otherwise, <see langword="false" />.
@@ -55,17 +61,17 @@ public class LengthStream : Stream
     public override bool CanWrite => _stream.CanWrite;
 
     /// <summary>Gets the length in bytes of the stream.</summary>
-    /// <exception cref="System.NotSupportedException">
+    /// <exception cref="NotSupportedException">
     ///     A class derived from <see cref="Stream" /> does not support seeking.
     /// </exception>
-    /// <exception cref="System.ObjectDisposedException">Methods were called after the stream was closed.</exception>
+    /// <exception cref="ObjectDisposedException">Methods were called after the stream was closed.</exception>
     /// <returns>A long value representing the length of the stream in bytes.</returns>
     public override long Length => _length ?? _stream.Length;
 
     /// <summary>Gets or sets the position within the current stream.</summary>
     /// <exception cref="IOException">An I/O error occurs.</exception>
-    /// <exception cref="System.NotSupportedException">The stream does not support seeking.</exception>
-    /// <exception cref="System.ObjectDisposedException">Methods were called after the stream was closed.</exception>
+    /// <exception cref="NotSupportedException">The stream does not support seeking.</exception>
+    /// <exception cref="ObjectDisposedException">Methods were called after the stream was closed.</exception>
     /// <returns>The current position within the stream.</returns>
     public override long Position
     {
@@ -73,10 +79,56 @@ public class LengthStream : Stream
         set => _stream.Position = value;
     }
 
+    /// <inheritdoc />
+    public override int ReadTimeout
+    {
+        get => _stream.ReadTimeout;
+        set => _stream.ReadTimeout = value;
+    }
+
+    /// <inheritdoc />
+    public override int WriteTimeout
+    {
+        get => _stream.WriteTimeout;
+        set => _stream.WriteTimeout = value;
+    }
+
+    /// <inheritdoc />
+    public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state) =>
+        _stream.BeginRead(buffer, offset, count, callback, state);
+
+    /// <inheritdoc />
+    public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state) =>
+        _stream.BeginWrite(buffer, offset, count, callback, state);
+
+    /// <inheritdoc />
+    public override void CopyTo(Stream destination, int bufferSize) => 
+        _stream.CopyTo(destination, bufferSize);
+
+    /// <inheritdoc />
+    public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) =>
+        _stream.CopyToAsync(destination, bufferSize, cancellationToken);
+
+    /// <inheritdoc />
+    public override ValueTask DisposeAsync() =>
+        _stream.DisposeAsync();
+
+    /// <inheritdoc />
+    public override int EndRead(IAsyncResult asyncResult) =>
+        _stream.EndRead(asyncResult);
+
+    /// <inheritdoc />
+    public override void EndWrite(IAsyncResult asyncResult) =>
+        _stream.EndWrite(asyncResult);
+
     /// <summary>Clears all buffers for this stream and causes any buffered data to be written to the underlying device.</summary>
-    /// <exception cref="System.IO.IOException">An I/O error occurs.</exception>
+    /// <exception cref="IOException">An I/O error occurs.</exception>
     public override void Flush() =>
         _stream.Flush();
+
+    /// <inheritdoc />
+    public override Task FlushAsync(CancellationToken cancellationToken) =>
+        _stream.FlushAsync(cancellationToken);
 
     /// <summary>
     ///     Reads a sequence of bytes from the current stream and advances the position within the stream by the number of
@@ -92,25 +144,41 @@ public class LengthStream : Stream
     ///     from the current stream.
     /// </param>
     /// <param name="count">The maximum number of bytes to be read from the current stream.</param>
-    /// <exception cref="System.ArgumentException">
+    /// <exception cref="ArgumentException">
     ///     The sum of <paramref name="offset" /> and <paramref name="count" /> is
     ///     larger than the buffer length.
     /// </exception>
-    /// <exception cref="System.ArgumentNullException">
+    /// <exception cref="ArgumentNullException">
     ///     <paramref name="buffer" /> is <see langword="null" />.
     /// </exception>
-    /// <exception cref="System.ArgumentOutOfRangeException">
+    /// <exception cref="ArgumentOutOfRangeException">
     ///     <paramref name="offset" /> or <paramref name="count" /> is negative.
     /// </exception>
     /// <exception cref="IOException">An I/O error occurs.</exception>
-    /// <exception cref="System.NotSupportedException">The stream does not support reading.</exception>
-    /// <exception cref="System.ObjectDisposedException">Methods were called after the stream was closed.</exception>
+    /// <exception cref="NotSupportedException">The stream does not support reading.</exception>
+    /// <exception cref="ObjectDisposedException">Methods were called after the stream was closed.</exception>
     /// <returns>
     ///     The total number of bytes read into the buffer. This can be less than the number of bytes requested if that
     ///     many bytes are not currently available, or zero (0) if the end of the stream has been reached.
     /// </returns>
     public override int Read(byte[] buffer, int offset, int count) =>
         _stream.Read(buffer, offset, count);
+
+    /// <inheritdoc />
+    public override int Read(Span<byte> buffer) =>
+        _stream.Read(buffer);
+
+    /// <inheritdoc />
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+        _stream.ReadAsync(buffer, offset, count, cancellationToken);
+
+    /// <inheritdoc />
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = new CancellationToken()) =>
+        _stream.ReadAsync(buffer, cancellationToken);
+
+    /// <inheritdoc />
+    public override int ReadByte() =>
+        _stream.ReadByte();
 
     /// <summary>Sets the position within the current stream.</summary>
     /// <param name="offset">A byte offset relative to the <paramref name="origin" /> parameter.</param>
@@ -119,11 +187,11 @@ public class LengthStream : Stream
     ///     obtain the new position.
     /// </param>
     /// <exception cref="IOException">An I/O error occurs.</exception>
-    /// <exception cref="System.NotSupportedException">
+    /// <exception cref="NotSupportedException">
     ///     The stream does not support seeking, such as if the stream is
     ///     constructed from a pipe or console output.
     /// </exception>
-    /// <exception cref="System.ObjectDisposedException">Methods were called after the stream was closed.</exception>
+    /// <exception cref="ObjectDisposedException">Methods were called after the stream was closed.</exception>
     /// <returns>The new position within the current stream.</returns>
     public override long Seek(long offset, SeekOrigin origin) =>
         _stream.Seek(offset, origin);
@@ -131,11 +199,11 @@ public class LengthStream : Stream
     /// <summary>Sets the length of the current stream.</summary>
     /// <param name="value">The desired length of the current stream in bytes.</param>
     /// <exception cref="IOException">An I/O error occurs.</exception>
-    /// <exception cref="System.NotSupportedException">
+    /// <exception cref="NotSupportedException">
     ///     The stream does not support both writing and seeking, such as if the
     ///     stream is constructed from a pipe or console output.
     /// </exception>
-    /// <exception cref="System.ObjectDisposedException">Methods were called after the stream was closed.</exception>
+    /// <exception cref="ObjectDisposedException">Methods were called after the stream was closed.</exception>
     public override void SetLength(long value) =>
         _stream.SetLength(value);
 
@@ -152,24 +220,40 @@ public class LengthStream : Stream
     ///     current stream.
     /// </param>
     /// <param name="count">The number of bytes to be written to the current stream.</param>
-    /// <exception cref="System.ArgumentException">
+    /// <exception cref="ArgumentException">
     ///     The sum of <paramref name="offset" /> and <paramref name="count" /> is
     ///     greater than the buffer length.
     /// </exception>
-    /// <exception cref="System.ArgumentNullException">
+    /// <exception cref="ArgumentNullException">
     ///     <paramref name="buffer" /> is <see langword="null" />.
     /// </exception>
-    /// <exception cref="System.ArgumentOutOfRangeException">
+    /// <exception cref="ArgumentOutOfRangeException">
     ///     <paramref name="offset" /> or <paramref name="count" /> is negative.
     /// </exception>
     /// <exception cref="IOException">An I/O error occurred, such as the specified file cannot be found.</exception>
-    /// <exception cref="System.NotSupportedException">The stream does not support writing.</exception>
-    /// <exception cref="System.ObjectDisposedException">
+    /// <exception cref="NotSupportedException">The stream does not support writing.</exception>
+    /// <exception cref="ObjectDisposedException">
     ///     <see cref="Stream.Write(byte[],int,int)" /> was called after the stream was
     ///     closed.
     /// </exception>
     public override void Write(byte[] buffer, int offset, int count) =>
         _stream.Write(buffer, offset, count);
+
+    /// <inheritdoc />
+    public override void Write(ReadOnlySpan<byte> buffer) =>
+        _stream.Write(buffer);
+
+    /// <inheritdoc />
+    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+        _stream.WriteAsync(buffer, offset, count, cancellationToken);
+
+    /// <inheritdoc />
+    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = new CancellationToken()) =>
+        _stream.WriteAsync(buffer, cancellationToken);
+
+    /// <inheritdoc />
+    public override void WriteByte(byte value) =>
+        _stream.WriteByte(value);
 
     /// <summary>
     ///     Releases the unmanaged resources used by the <see cref="LengthStream" /> and optionally
