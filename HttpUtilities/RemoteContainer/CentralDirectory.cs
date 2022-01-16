@@ -1,4 +1,4 @@
-// Copyright © 2021 Xpl0itR
+﻿// Copyright © 2021 Xpl0itR
 // 
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace HttpMultiPart.RemoteContainer;
+namespace HttpUtilities.RemoteContainer;
 
 internal class CentralDirectory : List<AbridgedCentralDirectoryEntry>
 {
@@ -29,9 +29,16 @@ internal record class AbridgedCentralDirectoryEntry
     private const uint   CentralDirectoryHeaderSignature = 0x02014b50;
     private const ushort Zip64ExtraFieldTag              = 0x0001;
 
+    [Flags]
+    private enum BitFlag : ushort
+    {
+        EncodingFlag = 1 << 11,
+        Unsupported  = 0xFFFF & ~((1 << 1) | (1 << 2) | EncodingFlag)
+    }
+
+    private readonly BitFlag _bitFlag;
     private readonly uint    _diskNumberStart;
     private readonly ushort  _minVersionExtract;
-    private readonly BitFlag _bitFlag;
 
     internal readonly ulong  CompressedSize;
     internal readonly ushort CompressionMethod;
@@ -43,7 +50,7 @@ internal record class AbridgedCentralDirectoryEntry
     {
         if (reader.ReadUInt32() != CentralDirectoryHeaderSignature)
         {
-            throw new InvalidDataException("Central Directory header signature mismatch."); //TODO: write better log message
+            throw new InvalidDataException("Central Directory header signature mismatch.");
         }
 
         reader.BaseStream.SeekForwards(2); // version made by
@@ -142,11 +149,5 @@ internal record class AbridgedCentralDirectoryEntry
     {
         Encoding encoding = _bitFlag.HasFlag(BitFlag.EncodingFlag) ? Encoding.UTF8 : Encoding.Default;
         return encoding.GetString(reader.ReadBytes(length), 0, length);
-    }
-
-    [Flags] private enum BitFlag : ushort
-    {
-        EncodingFlag = 1 << 11,
-        Unsupported  = 0xFFFF & ~(1 << 1 | 1 << 2 | EncodingFlag)
     }
 }

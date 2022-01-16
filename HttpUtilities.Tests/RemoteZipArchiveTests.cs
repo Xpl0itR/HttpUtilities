@@ -4,10 +4,10 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
-using HttpMultiPart.RemoteContainer;
+using HttpUtilities.RemoteContainer;
 using Xunit;
 
-namespace HttpMultiPart.Tests;
+namespace HttpUtilities.Tests;
 
 public class RemoteZipArchiveTests : IDisposable
 {
@@ -39,7 +39,7 @@ public class RemoteZipArchiveTests : IDisposable
         await Assert.ThrowsAsync<InvalidDataException>(async () =>
         {
             using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, url, CancellationToken.None);
-            await remoteZip.GetFile(SampleFileName, CancellationToken.None);
+            await remoteZip.OpenFile(SampleFileName, CancellationToken.None);
         });
     }
 
@@ -48,7 +48,7 @@ public class RemoteZipArchiveTests : IDisposable
     {
         using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, url, CancellationToken.None);
 
-        await using Stream zipStream = await remoteZip.GetFile(SampleFileName, CancellationToken.None);
+        await using Stream zipStream = await remoteZip.OpenFile(SampleFileName, CancellationToken.None);
         await using Stream memStream = new MemoryStream();
         await zipStream.CopyToAsync(memStream, CancellationToken.None);
 
@@ -63,7 +63,7 @@ public class RemoteZipArchiveTests : IDisposable
     public async Task TestGetEmpty(string fileName)
     {
         using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, SampleUrlZip, CancellationToken.None);
-        await using Stream     zipStream = await remoteZip.GetFile(fileName, CancellationToken.None);
+        await using Stream     zipStream = await remoteZip.OpenFile(fileName, CancellationToken.None);
 
         Assert.Equal(Stream.Null, zipStream);
     }

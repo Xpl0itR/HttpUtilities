@@ -6,7 +6,7 @@
 
 using System.IO;
 
-namespace HttpMultiPart.RemoteContainer;
+namespace HttpUtilities.RemoteContainer;
 
 internal readonly record struct AbridgedLocalHeader
 {
@@ -21,7 +21,7 @@ internal readonly record struct AbridgedLocalHeader
 
         if (reader.ReadUInt32() != LocalHeaderSignature)
         {
-            throw new InvalidDataException("Local Header signature mismatch."); //TODO: write better log message
+            throw new InvalidDataException("Local Header signature mismatch.");
         }
 
         stream.SeekForwards(22);

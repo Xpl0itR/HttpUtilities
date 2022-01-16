@@ -12,10 +12,17 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace HttpMultiPart.RemoteContainer;
+namespace HttpUtilities.RemoteContainer;
 
-// ZIP standard: https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
-// Supported subset: ISO/IEC 21320-1: https://www.iso.org/standard/60101.html
+/// <summary>
+///     Parses the headers of a remote ZIP archive in order to allow for the extraction of individual files from within it,
+///     without downloading the entire ZIP archive.
+/// </summary>
+/// <remarks>
+///     This implementation is limited to the <see href="https://www.iso.org/standard/60101.html">ISO/IEC 21320-1</see>
+///     subset of the <see href="https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT">ZIP Appnote</see>.
+///     <br />In addition to this, the "ZIP file comment" (Appnote, 4.3.16) is assumed to have a length of 0 bytes.
+/// </remarks>
 public class RemoteZipArchive : IDisposable
 {
     private readonly CentralDirectory   _centralDirectory;
@@ -28,7 +35,16 @@ public class RemoteZipArchive : IDisposable
     public void Dispose() =>
         _rangeRequestClient.Dispose();
 
-    public async Task<Stream> GetFile(string fileName, CancellationToken cancellationToken)
+    /// <summary>
+    ///     Opens a <see cref="Stream" /> that represents the specified file in the ZIP archive.
+    /// </summary>
+    /// <param name="fileName">A path relative to the root of the archive, identifying the desired file.</param>
+    /// <param name="cancellationToken">A cancellation token to propagate notification that operations should be canceled.</param>
+    /// <returns>
+    ///     A <see cref="Stream" /> that represents the specified file in the ZIP archive;
+    ///     <see cref="Stream.Null" /> if the entry is a folder or an empty file.
+    /// </returns>
+    public async Task<Stream> OpenFile(string fileName, CancellationToken cancellationToken)
     {
         AbridgedCentralDirectoryEntry centralDirEntry = _centralDirectory.Single(header => header.FileName == fileName).ThrowIfInvalid();
 
@@ -53,13 +69,12 @@ public class RemoteZipArchive : IDisposable
         New(httpMessageInvoker, new Uri(uri, UriKind.RelativeOrAbsolute), cancellationToken);
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="RemoteZipArchive" /> class.
+    ///     Asynchronously initializes a new instance of the <see cref="RemoteZipArchive" /> class.
     /// </summary>
     /// <param name="httpMessageInvoker">HTTP message invoker used to send requests.</param>
-    /// <param name="uri">Uniform Resource Identifier of the zip file to be parsed.</param>
-    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <param name="uri">Uniform Resource Identifier of the zip archive to be parsed.</param>
+    /// <param name="cancellationToken">A cancellation token to propagate notification that operations should be canceled.</param>
     /// <exception cref="InvalidDataException"></exception>
-    /// <exception cref="NotSupportedException"></exception>
     public static async Task<RemoteZipArchive> New(HttpMessageInvoker httpMessageInvoker, Uri? uri, CancellationToken cancellationToken)
     {
         RangeRequestClient rangeRequestClient = await RangeRequestClient.New(httpMessageInvoker, uri, cancellationToken);
@@ -84,7 +99,7 @@ public class RemoteZipArchive : IDisposable
             entryCount       = eocd64Record.EntryCount;
         }
 
-        if (centralDirOffset + centralDirLength > checked((ulong)rangeRequestClient.ContentLength))
+        if (centralDirOffset + centralDirLength > (ulong)rangeRequestClient.ContentLength)
         {
             throw new InvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
         }

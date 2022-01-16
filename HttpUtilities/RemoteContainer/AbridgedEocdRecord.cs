@@ -6,18 +6,23 @@
 
 using System.IO;
 
-namespace HttpMultiPart.RemoteContainer;
+namespace HttpUtilities.RemoteContainer;
 
 internal readonly record struct AbridgedEocdRecord
 {
-    internal const int  Length                 = 42; // ASSUMPTION: the "ZIP file comment" has size 0
+    /// <summary>
+    ///     "Zip64 end of central directory locator" (Appnote, 4.3.15) length +
+    ///     "End of central directory record" (Appnote, 4.3.16) length.
+    /// </summary>
+    /// <remarks>Assuming the "ZIP file comment" (Appnote, 4.3.16) has a length of 0 bytes.</remarks>
+    internal const int  Length                 = 20 + 22;
     private  const uint EocdSignature          = 0x06054b50;
     private  const uint Eocd64LocatorSignature = 0x07064b50;
 
-    internal readonly ulong? Eocd64RecordOffset;
-    internal readonly ushort EntryCount;
     internal readonly uint   CentralDirLength;
     internal readonly uint   CentralDirOffset;
+    internal readonly ushort EntryCount;
+    internal readonly ulong? Eocd64RecordOffset;
 
     internal AbridgedEocdRecord(Stream stream)
     {

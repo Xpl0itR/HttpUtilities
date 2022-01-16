@@ -6,16 +6,16 @@
 
 using System.IO;
 
-namespace HttpMultiPart.RemoteContainer;
+namespace HttpUtilities.RemoteContainer;
 
 internal readonly record struct AbridgedEocd64Record
 {
     internal const int  Length          = 56;
     private  const uint Eocd64Signature = 0x06064b50;
 
-    internal readonly ulong EntryCount;
     internal readonly ulong CentralDirLength;
     internal readonly ulong CentralDirOffset;
+    internal readonly ulong EntryCount;
 
     internal AbridgedEocd64Record(Stream stream)
     {
@@ -23,7 +23,7 @@ internal readonly record struct AbridgedEocd64Record
 
         if (reader.ReadUInt32() != Eocd64Signature)
         {
-            throw new InvalidDataException("ZIP64 End Of Central Directory Record signature mismatch."); //TODO: write better log message
+            throw new InvalidDataException("ZIP64 End Of Central Directory Record signature mismatch.");
         }
 
         // size of zip64 end of central directory record

@@ -9,7 +9,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace HttpMultiPart;
+namespace HttpUtilities;
 
 /// <summary>
 ///     Wraps a class derived from <see cref="Stream" /> whose length cannot be returned by
@@ -102,7 +102,7 @@ public class LengthStream : Stream
         _stream.BeginWrite(buffer, offset, count, callback, state);
 
     /// <inheritdoc />
-    public override void CopyTo(Stream destination, int bufferSize) => 
+    public override void CopyTo(Stream destination, int bufferSize) =>
         _stream.CopyTo(destination, bufferSize);
 
     /// <inheritdoc />
@@ -173,7 +173,7 @@ public class LengthStream : Stream
         _stream.ReadAsync(buffer, offset, count, cancellationToken);
 
     /// <inheritdoc />
-    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = new CancellationToken()) =>
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
         _stream.ReadAsync(buffer, cancellationToken);
 
     /// <inheritdoc />
@@ -248,7 +248,7 @@ public class LengthStream : Stream
         _stream.WriteAsync(buffer, offset, count, cancellationToken);
 
     /// <inheritdoc />
-    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = new CancellationToken()) =>
+    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
         _stream.WriteAsync(buffer, cancellationToken);
 
     /// <inheritdoc />

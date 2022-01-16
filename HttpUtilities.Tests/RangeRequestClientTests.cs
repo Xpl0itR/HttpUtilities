@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace HttpMultiPart.Tests;
+namespace HttpUtilities.Tests;
 
 public class RangeRequestClientTests : IDisposable
 {
