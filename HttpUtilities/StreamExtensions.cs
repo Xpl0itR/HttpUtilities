@@ -27,40 +27,55 @@ public static class StreamExtensions
     /// </summary>
     /// <param name="stream">The stream to seek.</param>
     /// <param name="maxSeek">The maximum number of bytes to seek backwards.</param>
-    /// <param name="bufferSize">The size of the buffer used for buffering in data from the stream.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
-    // TODO: Optimize
-    public static async Task SeekBackToNonZero(this Stream stream, long maxSeek, int bufferSize, CancellationToken cancellationToken)
+    /// <returns>The new position within the current stream.</returns>
+    public static async Task<long> SeekBackToNonZero(this Stream stream, long maxSeek, CancellationToken cancellationToken)
     {
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(maxSeek < bufferSize ? (int)maxSeek : bufferSize);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (stream.Position == 0)
+            return 0;
+
+        long   maxPos = stream.Position;
+        long   minPos = maxSeek >= maxPos ? 0 : maxPos - maxSeek;
+        int    toRead = maxSeek < DefaultBufferSize ? (int)maxSeek : DefaultBufferSize;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(toRead);
+
         try
         {
-            while (maxSeek > 0)
+            while (minPos < maxPos)
             {
-                int count = maxSeek < bufferSize ? (int)maxSeek : bufferSize;
-                stream.Seek(-count, SeekOrigin.Current);
+                stream.Seek(maxPos - minPos <= toRead ? minPos : (minPos + maxPos) / 2, SeekOrigin.Begin);
 
                 // ReSharper disable once TooWideLocalVariableScope
                 int read, offset = 0;
-                while (offset < count)
+                while (offset < toRead)
                 {
-                    if ((read = await stream.ReadAsync(buffer, offset, count - offset, cancellationToken)) == 0)
+                    if ((read = await stream.ReadAsync(buffer, offset, toRead - offset, cancellationToken).ConfigureAwait(false)) == 0)
                         throw new EndOfStreamException();
+
                     offset += read;
                 }
 
-                for (int i = count - 1; i >= 0; i--)
+                if (buffer[toRead - 1] != 0)
                 {
-                    if (buffer[i] != 0x0)
-                    {
-                        stream.Seek(-(count - i) + 1, SeekOrigin.Current);
-                        return;
-                    }
+                    minPos = stream.Position;
                 }
+                else
+                {
+                    for (int i = toRead - 2; i >= 0; i--)
+                    {
+                        if (buffer[i] != 0x0)
+                        {
+                            return stream.Seek(-(toRead - 1 - i), SeekOrigin.Current);
+                        }
+                    }
 
-                stream.Seek(-count, SeekOrigin.Current);
-                maxSeek -= count;
+                    maxPos = stream.Position - toRead;
+                }
             }
+
+            return stream.Seek(minPos, SeekOrigin.Begin);
         }
         finally
         {
@@ -69,20 +84,11 @@ public static class StreamExtensions
     }
 
     /// <summary>
-    ///     Advances a stream exactly <paramref name="count" /> bytes forward by either seeking
-    ///     or by reading in the case of a stream where seeking is unsupported.
+    ///     Reads exactly <paramref name="count" /> bytes from a non-seekable stream in order to advance its position.
     /// </summary>
-    /// <param name="stream">The stream to seek.</param>
-    /// <param name="count">The number of bytes to advance the stream by.</param>
-    public static void SeekForwards(this Stream stream, int count)
-    {
-        if (stream.CanSeek)
-            SeekAdvance(stream, count);
-        else
-            ReadAdvance(stream, count);
-    }
-
-    private static void ReadAdvance(Stream stream, int count)
+    /// <param name="stream">The stream to advance.</param>
+    /// <param name="count">The number of bytes to advance the stream's position by.</param>
+    public static void AdvancePosition(this Stream stream, int count)
     {
         byte[] buffer = ArrayPool<byte>.Shared.Rent(count <= DefaultBufferSize ? count : DefaultBufferSize);
         try
@@ -91,9 +97,7 @@ public static class StreamExtensions
             {
                 int skipped = stream.Read(buffer, 0, count <= buffer.Length ? count : buffer.Length);
                 if (skipped == 0)
-                {
                     throw new EndOfStreamException();
-                }
 
                 count -= skipped;
             }
@@ -102,15 +106,5 @@ public static class StreamExtensions
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
-    }
-
-    private static void SeekAdvance(Stream stream, int count)
-    {
-        if (stream.Position + count > stream.Length)
-        {
-            throw new EndOfStreamException();
-        }
-
-        stream.Seek(count, SeekOrigin.Current);
     }
 }

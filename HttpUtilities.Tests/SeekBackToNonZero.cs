@@ -24,10 +24,10 @@ public class SeekBackToNonZero
         await using Stream testStream = new MemoryStream(buffer);
         testStream.Seek(0, SeekOrigin.End);
 
-        await testStream.SeekBackToNonZero(maxSeek, StreamExtensions.DefaultBufferSize, CancellationToken.None);
+        await testStream.SeekBackToNonZero(maxSeek, CancellationToken.None);
         Assert.Equal(maxSeek, testStream.Position);
 
-        await testStream.SeekBackToNonZero(maxSeek, StreamExtensions.DefaultBufferSize, CancellationToken.None);
+        await testStream.SeekBackToNonZero(maxSeek, CancellationToken.None);
         Assert.Equal(bytePos, testStream.Position);
     }
 }

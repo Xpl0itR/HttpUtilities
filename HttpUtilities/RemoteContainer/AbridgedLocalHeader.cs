@@ -24,7 +24,7 @@ internal readonly record struct AbridgedLocalHeader
             throw new InvalidDataException("Local Header signature mismatch.");
         }
 
-        stream.SeekForwards(22);
+        stream.AdvancePosition(22);
 
         // file name length
         // extra field length

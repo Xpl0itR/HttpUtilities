@@ -32,8 +32,26 @@ public class RemoteZipArchive : IDisposable
         (_rangeRequestClient, _centralDirectory) = (rangeRequestClient, centralDirectory);
 
     /// <inheritdoc />
-    public void Dispose() =>
-        _rangeRequestClient.Dispose();
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    ///     Releases the unmanaged resources and optionally disposes of the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    ///     <see langword="true" /> to release both managed and unmanaged resources;
+    ///     <see langword="false" /> to releases only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _rangeRequestClient.Dispose();
+        }
+    }
 
     /// <summary>
     ///     Opens a <see cref="Stream" /> that represents the specified file in the ZIP archive.
@@ -46,6 +64,8 @@ public class RemoteZipArchive : IDisposable
     /// </returns>
     public async Task<Stream> OpenFile(string fileName, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         AbridgedCentralDirectoryEntry centralDirEntry = _centralDirectory.Single(header => header.FileName == fileName).ThrowIfInvalid();
 
         if (centralDirEntry.UncompressedSize < 1)
@@ -53,20 +73,20 @@ public class RemoteZipArchive : IDisposable
             return Stream.Null;
         }
 
-        await using Stream  headerStream = await _rangeRequestClient.GetSection(checked((long)centralDirEntry.LocalHeaderOffset), AbridgedLocalHeader.FixedFieldsLength, cancellationToken);
+        await using Stream  headerStream = await _rangeRequestClient.GetSection(checked((long)centralDirEntry.LocalHeaderOffset), AbridgedLocalHeader.FixedFieldsLength, cancellationToken).ConfigureAwait(false);
         AbridgedLocalHeader localHeader  = new(headerStream);
 
         long   fileDataOffset = checked((long)(centralDirEntry.LocalHeaderOffset + localHeader.Length));
-        Stream fileDataStream = await _rangeRequestClient.GetSection(fileDataOffset, checked((long)centralDirEntry.CompressedSize), cancellationToken);
+        Stream fileDataStream = await _rangeRequestClient.GetSection(fileDataOffset, checked((long)centralDirEntry.CompressedSize), cancellationToken).ConfigureAwait(false);
 
         return centralDirEntry.CompressionMethod == 8
             ? new DeflateStream(fileDataStream, CompressionMode.Decompress, false)
             : fileDataStream;
     }
 
-    /// <inheritdoc cref="New(HttpMessageInvoker, Uri, CancellationToken)" />
-    public static Task<RemoteZipArchive> New(HttpMessageInvoker httpMessageInvoker, string uri, CancellationToken cancellationToken) =>
-        New(httpMessageInvoker, new Uri(uri, UriKind.RelativeOrAbsolute), cancellationToken);
+    /// <inheritdoc cref="New(HttpMessageInvoker, Uri, CancellationToken, bool)" />
+    public static Task<RemoteZipArchive> New(HttpMessageInvoker httpMessageInvoker, string uri, CancellationToken cancellationToken, bool leaveOpen) =>
+        New(httpMessageInvoker, new Uri(uri, UriKind.RelativeOrAbsolute), cancellationToken, leaveOpen);
 
     /// <summary>
     ///     Asynchronously initializes a new instance of the <see cref="RemoteZipArchive" /> class.
@@ -74,12 +94,16 @@ public class RemoteZipArchive : IDisposable
     /// <param name="httpMessageInvoker">HTTP message invoker used to send requests.</param>
     /// <param name="uri">Uniform Resource Identifier of the zip archive to be parsed.</param>
     /// <param name="cancellationToken">A cancellation token to propagate notification that operations should be canceled.</param>
+    /// <param name="leaveOpen">
+    ///     <see langword="true" /> to leave the <paramref name="httpMessageInvoker"/> open after the
+    ///     <see cref="RemoteZipArchive" /> object is disposed; otherwise, <see langword="false" />
+    /// </param>
     /// <exception cref="InvalidDataException"></exception>
-    public static async Task<RemoteZipArchive> New(HttpMessageInvoker httpMessageInvoker, Uri? uri, CancellationToken cancellationToken)
+    public static async Task<RemoteZipArchive> New(HttpMessageInvoker httpMessageInvoker, Uri? uri, CancellationToken cancellationToken, bool leaveOpen)
     {
-        RangeRequestClient rangeRequestClient = await RangeRequestClient.New(httpMessageInvoker, uri, cancellationToken);
+        RangeRequestClient rangeRequestClient = await RangeRequestClient.New(httpMessageInvoker, uri, cancellationToken, leaveOpen).ConfigureAwait(false);
 
-        await using Stream eocdStream = await rangeRequestClient.GetRange(null, AbridgedEocdRecord.Length, cancellationToken);
+        await using Stream eocdStream = await rangeRequestClient.GetRange(null, AbridgedEocdRecord.Length, cancellationToken).ConfigureAwait(false);
         AbridgedEocdRecord eocdRecord = new(eocdStream);
 
         ulong centralDirOffset, centralDirLength, entryCount;
@@ -91,7 +115,7 @@ public class RemoteZipArchive : IDisposable
         }
         else
         {
-            await using Stream   eocd64Stream = await rangeRequestClient.GetSection(checked((long)eocdRecord.Eocd64RecordOffset), AbridgedEocd64Record.Length, cancellationToken);
+            await using Stream   eocd64Stream = await rangeRequestClient.GetSection(checked((long)eocdRecord.Eocd64RecordOffset), AbridgedEocd64Record.Length, cancellationToken).ConfigureAwait(false);
             AbridgedEocd64Record eocd64Record = new(eocd64Stream);
 
             centralDirOffset = eocd64Record.CentralDirOffset;
@@ -104,7 +128,7 @@ public class RemoteZipArchive : IDisposable
             throw new InvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
         }
 
-        await using Stream centralDirStream = await rangeRequestClient.GetSection(checked((long)centralDirOffset), checked((long)centralDirLength), cancellationToken);
+        await using Stream centralDirStream = await rangeRequestClient.GetSection(checked((long)centralDirOffset), checked((long)centralDirLength), cancellationToken).ConfigureAwait(false);
         CentralDirectory   centralDirectory = new(centralDirStream, entryCount);
 
         return new RemoteZipArchive(rangeRequestClient, centralDirectory);

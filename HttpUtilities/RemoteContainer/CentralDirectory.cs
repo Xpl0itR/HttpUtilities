@@ -53,7 +53,7 @@ internal record class AbridgedCentralDirectoryEntry
             throw new InvalidDataException("Central Directory header signature mismatch.");
         }
 
-        reader.BaseStream.SeekForwards(2); // version made by
+        reader.BaseStream.AdvancePosition(2); // version made by
 
         _minVersionExtract = reader.ReadUInt16();
         _bitFlag           = (BitFlag)reader.ReadUInt16();
@@ -62,7 +62,7 @@ internal record class AbridgedCentralDirectoryEntry
         // last mod file time
         // last mod file date
         // crc-32
-        reader.BaseStream.SeekForwards(2 + 2 + 4);
+        reader.BaseStream.AdvancePosition(2 + 2 + 4);
 
         CompressedSize   = reader.ReadUInt32();
         UncompressedSize = reader.ReadUInt32();
@@ -75,7 +75,7 @@ internal record class AbridgedCentralDirectoryEntry
 
         // internal file attributes
         // external file attributes
-        reader.BaseStream.SeekForwards(2 + 4);
+        reader.BaseStream.AdvancePosition(2 + 4);
 
         LocalHeaderOffset = reader.ReadUInt32();
         FileName          = ReadString(reader, fileNameLength);
@@ -111,13 +111,13 @@ internal record class AbridgedCentralDirectoryEntry
             }
             else
             {
-                reader.BaseStream.SeekForwards(extraFieldLength);
+                reader.BaseStream.AdvancePosition(extraFieldLength);
             }
 
             extraFieldsLength -= extraFieldLength;
         }
 
-        reader.BaseStream.SeekForwards(fileCommentLength);
+        reader.BaseStream.AdvancePosition(fileCommentLength);
     }
 
     internal AbridgedCentralDirectoryEntry ThrowIfInvalid()

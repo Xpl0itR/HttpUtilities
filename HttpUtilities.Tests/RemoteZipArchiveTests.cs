@@ -31,14 +31,14 @@ public class RemoteZipArchiveTests : IDisposable
 
     [Theory, InlineData(SampleUrlZip), InlineData(SampleUrlZip64)]
     public async Task TestGetZipCentralDirectory(string url) =>
-        await RemoteZipArchive.New(_httpClient, url, CancellationToken.None);
+        await RemoteZipArchive.New(_httpClient, url, CancellationToken.None, true);
 
     [Theory, InlineData(SampleUrlZipLzma), InlineData(SampleUrlZipCrypto), InlineData(SampleUrlZipSplit)]
     public async Task TestGetFileUnsupported(string url)
     {
         await Assert.ThrowsAsync<InvalidDataException>(async () =>
         {
-            using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, url, CancellationToken.None);
+            using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, url, CancellationToken.None, true);
             await remoteZip.OpenFile(SampleFileName, CancellationToken.None);
         });
     }
@@ -46,7 +46,7 @@ public class RemoteZipArchiveTests : IDisposable
     [Theory, InlineData(SampleUrlZip), InlineData(SampleUrlZip64)]
     public async Task TestGetFile(string url)
     {
-        using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, url, CancellationToken.None);
+        using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, url, CancellationToken.None, true);
 
         await using Stream zipStream = await remoteZip.OpenFile(SampleFileName, CancellationToken.None);
         await using Stream memStream = new MemoryStream();
@@ -62,7 +62,7 @@ public class RemoteZipArchiveTests : IDisposable
     [Theory, InlineData(EmptyFileName), InlineData(FolderName)]
     public async Task TestGetEmpty(string fileName)
     {
-        using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, SampleUrlZip, CancellationToken.None);
+        using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, SampleUrlZip, CancellationToken.None, true);
         await using Stream     zipStream = await remoteZip.OpenFile(fileName, CancellationToken.None);
 
         Assert.Equal(Stream.Null, zipStream);

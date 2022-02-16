@@ -5,6 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 using System;
+using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 
@@ -52,11 +53,14 @@ internal record ChunkMetadata
 
     internal void WriteTo(Stream stream)
     {
-        using BinaryWriter writer = new(stream, Encoding.UTF8, true);
-        writer.Write(Magic);
-        writer.Write(NumChunks);
-        writer.Write(_chunkLength);
-        writer.Write(_lastChunkLength);
+        Span<byte> buffer = stackalloc byte[sizeof(uint) + sizeof(int) + sizeof(long) + sizeof(long)];
+
+        BinaryPrimitives.WriteUInt32LittleEndian(buffer, Magic);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer.Slice(sizeof(uint)), NumChunks);
+        BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(sizeof(uint) + sizeof(int)),                _chunkLength);
+        BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(sizeof(uint) + sizeof(int) + sizeof(long)), _chunkLength);
+
+        stream.Write(buffer);
     }
 
     internal long OffsetOf(int index)

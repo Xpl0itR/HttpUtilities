@@ -25,9 +25,10 @@ public class RangeRequestClient : IDisposable
     private readonly EntityTagHeaderValue? _eTag;
     private readonly HttpMessageInvoker    _httpMessageInvoker;
     private readonly Uri?                  _uri;
+    private readonly bool                  _leaveOpen;
 
-    private RangeRequestClient(HttpMessageInvoker httpMessageInvoker, Uri? uri, EntityTagHeaderValue? eTag, long contentLength) =>
-        (_httpMessageInvoker, _uri, _eTag, ContentLength) = (httpMessageInvoker, uri, eTag, contentLength);
+    private RangeRequestClient(HttpMessageInvoker httpMessageInvoker, Uri? uri, EntityTagHeaderValue? eTag, long contentLength, bool leaveOpen) =>
+        (_httpMessageInvoker, _uri, _eTag, ContentLength, _leaveOpen) = (httpMessageInvoker, uri, eTag, contentLength, leaveOpen);
 
     /// <summary>
     ///     Gets the value of the
@@ -37,8 +38,26 @@ public class RangeRequestClient : IDisposable
     public long ContentLength { get; }
 
     /// <inheritdoc />
-    public void Dispose() =>
-        _httpMessageInvoker.Dispose();
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    ///     Releases the unmanaged resources and optionally disposes of the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    ///     <see langword="true" /> to release both managed and unmanaged resources;
+    ///     <see langword="false" /> to releases only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing && !_leaveOpen)
+        {
+            _httpMessageInvoker.Dispose();
+        }
+    }
 
     /// <summary>
     ///     Send a GET request with the range header set to the specified offset and length and return the content, represented
@@ -85,7 +104,7 @@ public class RangeRequestClient : IDisposable
             request.Headers.IfMatch.Add(_eTag);
         }
 
-        HttpResponseMessage response = await SendAsync(_httpMessageInvoker, request, cancellationToken);
+        HttpResponseMessage response = await SendAsync(_httpMessageInvoker, request, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode != HttpStatusCode.PartialContent)
         {
             throw new HttpRequestException(
@@ -94,15 +113,15 @@ public class RangeRequestClient : IDisposable
                 response.StatusCode);
         }
 
-        Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         return stream is MemoryStream
             ? stream
             : new LengthStream(stream, response.Content.Headers.ContentLength);
     }
 
-    /// <inheritdoc cref="New(HttpMessageInvoker, Uri, CancellationToken)" />
-    public static Task<RangeRequestClient> New(HttpMessageInvoker httpMessageInvoker, string uri, CancellationToken cancellationToken) =>
-        New(httpMessageInvoker, new Uri(uri, UriKind.RelativeOrAbsolute), cancellationToken);
+    /// <inheritdoc cref="New(HttpMessageInvoker, Uri, CancellationToken, bool)" />
+    public static Task<RangeRequestClient> New(HttpMessageInvoker httpMessageInvoker, string uri, CancellationToken cancellationToken, bool leaveOpen) =>
+        New(httpMessageInvoker, new Uri(uri, UriKind.RelativeOrAbsolute), cancellationToken, leaveOpen);
 
     /// <summary>
     ///     Asynchronously initializes a new instance of the <see cref="RangeRequestClient" /> class.
@@ -110,11 +129,15 @@ public class RangeRequestClient : IDisposable
     /// <param name="httpMessageInvoker">HTTP message invoker used to send requests.</param>
     /// <param name="uri">Uniform Resource Identifier of the resource to be requested.</param>
     /// <param name="cancellationToken">A cancellation token to propagate notification that operations should be canceled.</param>
+    /// <param name="leaveOpen">
+    ///     <see langword="true" /> to leave the <paramref name="httpMessageInvoker"/> open after the
+    ///     <see cref="RangeRequestClient" /> object is disposed; otherwise, <see langword="false" />
+    /// </param>
     /// <exception cref="NotSupportedException">The requested resource does not support partial requests.</exception>
-    public static async Task<RangeRequestClient> New(HttpMessageInvoker httpMessageInvoker, Uri? uri, CancellationToken cancellationToken)
+    public static async Task<RangeRequestClient> New(HttpMessageInvoker httpMessageInvoker, Uri? uri, CancellationToken cancellationToken, bool leaveOpen)
     {
         HttpRequestMessage  request  = new(HttpMethod.Head, uri);
-        HttpResponseMessage response = await SendAsync(httpMessageInvoker, request, cancellationToken);
+        HttpResponseMessage response = await SendAsync(httpMessageInvoker, request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         if (!response.Headers.AcceptRanges.Contains("bytes"))
@@ -122,7 +145,7 @@ public class RangeRequestClient : IDisposable
             throw new NotSupportedException("The requested resource does not support partial requests.");
         }
 
-        return new RangeRequestClient(httpMessageInvoker, uri, response.Headers.ETag, response.Content.Headers.ContentLength!.Value);
+        return new RangeRequestClient(httpMessageInvoker, uri, response.Headers.ETag, response.Content.Headers.ContentLength!.Value, leaveOpen);
     }
 
     private static Task<HttpResponseMessage> SendAsync(HttpMessageInvoker httpMessageInvoker, HttpRequestMessage request, CancellationToken cancellationToken) =>

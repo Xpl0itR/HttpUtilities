@@ -28,7 +28,7 @@ internal readonly record struct AbridgedEocd64Record
 
         // size of zip64 end of central directory record
         // version made by
-        stream.SeekForwards(8 + 2);
+        stream.AdvancePosition(8 + 2);
 
         if (reader.ReadUInt16() > 45) // version needed to extract
         {
