@@ -9,6 +9,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -25,11 +26,14 @@ namespace HttpUtilities.RemoteContainer;
 /// </remarks>
 public class RemoteZipArchive : IDisposable
 {
-    private readonly CentralDirectory   _centralDirectory;
-    private readonly RangeRequestClient _rangeRequestClient;
+    private readonly CentralDirectory      _centralDirectory;
+    private readonly HttpMessageInvoker    _httpMessageInvoker;
+    private readonly Uri?                  _uri;
+    private readonly EntityTagHeaderValue? _eTag;
+    private readonly bool                  _leaveOpen;
 
-    private RemoteZipArchive(RangeRequestClient rangeRequestClient, CentralDirectory centralDirectory) =>
-        (_rangeRequestClient, _centralDirectory) = (rangeRequestClient, centralDirectory);
+    private RemoteZipArchive(HttpMessageInvoker httpMessageInvoker, Uri? uri, EntityTagHeaderValue? etag, CentralDirectory centralDirectory, bool leaveOpen) =>
+        (_httpMessageInvoker, _uri, _eTag, _centralDirectory, _leaveOpen) = (httpMessageInvoker, uri, etag, centralDirectory, leaveOpen);
 
     /// <inheritdoc />
     public void Dispose()
@@ -47,9 +51,9 @@ public class RemoteZipArchive : IDisposable
     /// </param>
     protected virtual void Dispose(bool disposing)
     {
-        if (disposing)
+        if (disposing && !_leaveOpen)
         {
-            _rangeRequestClient.Dispose();
+            _httpMessageInvoker.Dispose();
         }
     }
 
@@ -73,11 +77,11 @@ public class RemoteZipArchive : IDisposable
             return Stream.Null;
         }
 
-        await using Stream  headerStream = await _rangeRequestClient.GetSection(checked((long)centralDirEntry.LocalHeaderOffset), AbridgedLocalHeader.FixedFieldsLength, cancellationToken).ConfigureAwait(false);
+        await using Stream  headerStream = await _httpMessageInvoker.GetChunkAsync(_uri, _eTag, checked((long)centralDirEntry.LocalHeaderOffset), AbridgedLocalHeader.FixedFieldsLength, cancellationToken).ConfigureAwait(false);
         AbridgedLocalHeader localHeader  = new(headerStream);
 
         long   fileDataOffset = checked((long)(centralDirEntry.LocalHeaderOffset + localHeader.Length));
-        Stream fileDataStream = await _rangeRequestClient.GetSection(fileDataOffset, checked((long)centralDirEntry.CompressedSize), cancellationToken).ConfigureAwait(false);
+        Stream fileDataStream = await _httpMessageInvoker.GetChunkAsync(_uri, _eTag, fileDataOffset, checked((long)centralDirEntry.CompressedSize), cancellationToken).ConfigureAwait(false);
 
         return centralDirEntry.CompressionMethod == 8
             ? new DeflateStream(fileDataStream, CompressionMode.Decompress, false)
@@ -101,9 +105,11 @@ public class RemoteZipArchive : IDisposable
     /// <exception cref="InvalidDataException"></exception>
     public static async Task<RemoteZipArchive> New(HttpMessageInvoker httpMessageInvoker, Uri? uri, CancellationToken cancellationToken, bool leaveOpen)
     {
-        RangeRequestClient rangeRequestClient = await RangeRequestClient.New(httpMessageInvoker, uri, cancellationToken, leaveOpen).ConfigureAwait(false);
+        HttpResponseMessage   response      = await httpMessageInvoker.HeadRangeAsync(uri, cancellationToken).ConfigureAwait(false);
+        long                  contentLength = response.Content.Headers.ContentLength!.Value;
+        EntityTagHeaderValue? eTag          = response.Headers.ETag;
 
-        await using Stream eocdStream = await rangeRequestClient.GetRange(null, AbridgedEocdRecord.Length, cancellationToken).ConfigureAwait(false);
+        await using Stream eocdStream = await httpMessageInvoker.GetRangeAsync(uri, eTag, null, AbridgedEocdRecord.Length, cancellationToken).ConfigureAwait(false);
         AbridgedEocdRecord eocdRecord = new(eocdStream);
 
         ulong centralDirOffset, centralDirLength, entryCount;
@@ -115,7 +121,7 @@ public class RemoteZipArchive : IDisposable
         }
         else
         {
-            await using Stream   eocd64Stream = await rangeRequestClient.GetSection(checked((long)eocdRecord.Eocd64RecordOffset), AbridgedEocd64Record.Length, cancellationToken).ConfigureAwait(false);
+            await using Stream   eocd64Stream = await httpMessageInvoker.GetChunkAsync(uri, eTag, checked((long)eocdRecord.Eocd64RecordOffset), AbridgedEocd64Record.Length, cancellationToken).ConfigureAwait(false);
             AbridgedEocd64Record eocd64Record = new(eocd64Stream);
 
             centralDirOffset = eocd64Record.CentralDirOffset;
@@ -123,14 +129,14 @@ public class RemoteZipArchive : IDisposable
             entryCount       = eocd64Record.EntryCount;
         }
 
-        if (centralDirOffset + centralDirLength > (ulong)rangeRequestClient.ContentLength)
+        if (centralDirOffset + centralDirLength > (ulong)contentLength)
         {
             throw new InvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
         }
 
-        await using Stream centralDirStream = await rangeRequestClient.GetSection(checked((long)centralDirOffset), checked((long)centralDirLength), cancellationToken).ConfigureAwait(false);
+        await using Stream centralDirStream = await httpMessageInvoker.GetChunkAsync(uri, eTag, checked((long)centralDirOffset), checked((long)centralDirLength), cancellationToken).ConfigureAwait(false);
         CentralDirectory   centralDirectory = new(centralDirStream, entryCount);
 
-        return new RemoteZipArchive(rangeRequestClient, centralDirectory);
+        return new RemoteZipArchive(httpMessageInvoker, uri, eTag, centralDirectory, leaveOpen);
     }
 }

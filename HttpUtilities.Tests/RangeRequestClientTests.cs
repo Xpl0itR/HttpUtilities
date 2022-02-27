@@ -9,8 +9,8 @@ namespace HttpUtilities.Tests;
 
 public class RangeRequestClientTests : IDisposable
 {
-    private const string UrlSampleZipNormal = "https://testserver.xpl0itr.repl.co/sample.zip";
-    private const string UrlSampleZipLegacy = UrlSampleZipNormal + "?legacy";
+    private readonly Uri _uriSampleZipNormal = new("https://testserver.xpl0itr.repl.co/sample.zip");
+    private readonly Uri _uriSampleZipLegacy = new("https://testserver.xpl0itr.repl.co/sample.zip?legacy");
 
     private readonly HttpClient _httpClient;
 
@@ -22,29 +22,29 @@ public class RangeRequestClientTests : IDisposable
 
     [Fact]
     public async Task TestRangeSupported() =>
-        await RangeRequestClient.New(_httpClient, UrlSampleZipNormal, CancellationToken.None, true);
+        await _httpClient.HeadRangeAsync(_uriSampleZipNormal, CancellationToken.None);
 
     [Fact]
     public async Task TestRangeNotSupported() =>
-        await Assert.ThrowsAsync<NotSupportedException>(() => RangeRequestClient.New(_httpClient, UrlSampleZipLegacy, CancellationToken.None, true));
+        await Assert.ThrowsAsync<NotSupportedException>(() => _httpClient.HeadRangeAsync(_uriSampleZipLegacy, CancellationToken.None));
 
     [Theory, InlineData(0, 1023), InlineData(1024, 4095), InlineData(4095, null), InlineData(null, 1023)]
     public async Task TestGetRange(long? from, long? to)
     {
-        RangeRequestClient reqClient = await RangeRequestClient.New(_httpClient, UrlSampleZipNormal, CancellationToken.None, true);
-        await using Stream resStream = await reqClient.GetRange(from, to, CancellationToken.None);
-        await using Stream memStream = new MemoryStream();
+        HttpResponseMessage response  = await _httpClient.HeadRangeAsync(_uriSampleZipNormal, CancellationToken.None);
+        await using Stream  resStream = await _httpClient.GetRangeAsync(_uriSampleZipNormal, response.Headers.ETag, from, to, CancellationToken.None);
+        await using Stream  memStream = new MemoryStream();
         await resStream.CopyToAsync(memStream);
 
-        Assert.Equal(from == null ? to : (to + 1 ?? reqClient.ContentLength) - from, memStream.Position);
+        Assert.Equal(from == null ? to : (to + 1 ?? response.Content.Headers.ContentLength) - from, memStream.Position);
     }
 
     [Theory, InlineData(0, 1024)]
     public async Task TestGetSection(long offset, long length)
     {
-        RangeRequestClient reqClient = await RangeRequestClient.New(_httpClient, UrlSampleZipNormal, CancellationToken.None, true);
-        await using Stream resStream = await reqClient.GetSection(offset, length, CancellationToken.None);
-        await using Stream memStream = new MemoryStream();
+        HttpResponseMessage response  = await _httpClient.HeadRangeAsync(_uriSampleZipNormal, CancellationToken.None);
+        await using Stream  resStream = await _httpClient.GetChunkAsync(_uriSampleZipNormal, response.Headers.ETag, offset, length, CancellationToken.None);
+        await using Stream  memStream = new MemoryStream();
         await resStream.CopyToAsync(memStream);
 
         Assert.Equal(length, memStream.Position);

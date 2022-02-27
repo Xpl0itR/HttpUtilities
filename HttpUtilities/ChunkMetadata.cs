@@ -9,7 +9,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 
-namespace HttpUtilities.MultiConnectionDownload;
+namespace HttpUtilities;
 
 internal record ChunkMetadata
 {

@@ -53,7 +53,7 @@ public class RemoteZipArchiveTests : IDisposable
         await zipStream.CopyToAsync(memStream, CancellationToken.None);
 
         using HashAlgorithm hashAlg = MD5.Create();
-        memStream.Position = 0;
+        memStream.Seek(0, SeekOrigin.Begin);
         byte[] hash = await hashAlg.ComputeHashAsync(memStream, CancellationToken.None);
 
         Assert.Equal(SampleHash, Convert.ToHexString(hash));
