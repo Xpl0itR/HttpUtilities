@@ -5,6 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 using System.IO;
+using CommunityToolkit.Diagnostics;
 
 namespace HttpUtilities.RemoteContainer;
 
@@ -21,7 +22,7 @@ internal readonly record struct AbridgedLocalHeader
 
         if (reader.ReadUInt32() != LocalHeaderSignature)
         {
-            throw new InvalidDataException("Local Header signature mismatch.");
+            ThrowHelper.ThrowInvalidDataException("Local Header signature mismatch.");
         }
 
         stream.AdvancePosition(22);

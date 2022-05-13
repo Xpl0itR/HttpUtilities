@@ -5,6 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 using System.IO;
+using CommunityToolkit.Diagnostics;
 
 namespace HttpUtilities.RemoteContainer;
 
@@ -23,7 +24,7 @@ internal readonly record struct AbridgedEocd64Record
 
         if (reader.ReadUInt32() != Eocd64Signature)
         {
-            throw new InvalidDataException("ZIP64 End Of Central Directory Record signature mismatch.");
+            ThrowHelper.ThrowInvalidDataException("ZIP64 End Of Central Directory Record signature mismatch.");
         }
 
         // size of zip64 end of central directory record
@@ -32,15 +33,17 @@ internal readonly record struct AbridgedEocd64Record
 
         if (reader.ReadUInt16() > 45) // version needed to extract
         {
-            throw new InvalidDataException("ISO/IEC 21320: \"version needed to extract\" shall not be greater than 45.");
+            ThrowHelper.ThrowInvalidDataException("ISO/IEC 21320: \"version needed to extract\" shall not be greater than 45.");
         }
 
-        // number of this disk
-        // number of the disk with the start of the central directory
-        // total number of entries in the central directory on this disk
-        if (reader.ReadUInt32() + reader.ReadUInt32() != 0 || reader.ReadUInt64() != (EntryCount = reader.ReadUInt64()))
+        uint  diskNumber       = reader.ReadUInt32(); // number of this disk
+        uint  diskNumberWithCd = reader.ReadUInt32(); // number of the disk with the start of the central directory
+        ulong entryCountOnDisk = reader.ReadUInt64(); // total number of entries in the central directory on this disk
+        EntryCount             = reader.ReadUInt64();
+
+        if (diskNumber != 0 || diskNumberWithCd != 0 || entryCountOnDisk != EntryCount)
         {
-            throw new InvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
+            ThrowHelper.ThrowInvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
         }
 
         CentralDirLength = reader.ReadUInt64();

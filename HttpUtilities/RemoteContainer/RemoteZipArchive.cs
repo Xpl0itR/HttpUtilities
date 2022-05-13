@@ -12,6 +12,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
+using CommunityToolkit.Diagnostics;
 
 namespace HttpUtilities.RemoteContainer;
 
@@ -26,6 +27,8 @@ namespace HttpUtilities.RemoteContainer;
 /// </remarks>
 public class RemoteZipArchive : IDisposable
 {
+    private const int Deflate = 8;
+
     private readonly CentralDirectory      _centralDirectory;
     private readonly HttpMessageInvoker    _httpMessageInvoker;
     private readonly Uri?                  _uri;
@@ -83,8 +86,8 @@ public class RemoteZipArchive : IDisposable
         long   fileDataOffset = checked((long)(centralDirEntry.LocalHeaderOffset + localHeader.Length));
         Stream fileDataStream = await _httpMessageInvoker.GetChunkAsync(_uri, _eTag, fileDataOffset, checked((long)centralDirEntry.CompressedSize), cancellationToken).ConfigureAwait(false);
 
-        return centralDirEntry.CompressionMethod == 8
-            ? new DeflateStream(fileDataStream, CompressionMode.Decompress, false)
+        return centralDirEntry.CompressionMethod == Deflate
+            ? new DeflateStream(fileDataStream, CompressionMode.Decompress, leaveOpen: false)
             : fileDataStream;
     }
 
@@ -131,7 +134,7 @@ public class RemoteZipArchive : IDisposable
 
         if (centralDirOffset + centralDirLength > (ulong)contentLength)
         {
-            throw new InvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
+            ThrowHelper.ThrowInvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
         }
 
         await using Stream centralDirStream = await httpMessageInvoker.GetChunkAsync(uri, eTag, checked((long)centralDirOffset), checked((long)centralDirLength), cancellationToken).ConfigureAwait(false);

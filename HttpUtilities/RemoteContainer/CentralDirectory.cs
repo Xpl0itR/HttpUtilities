@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using CommunityToolkit.Diagnostics;
 
 namespace HttpUtilities.RemoteContainer;
 
@@ -50,7 +51,7 @@ internal record class AbridgedCentralDirectoryEntry
     {
         if (reader.ReadUInt32() != CentralDirectoryHeaderSignature)
         {
-            throw new InvalidDataException("Central Directory header signature mismatch.");
+            ThrowHelper.ThrowInvalidDataException("Central Directory header signature mismatch.");
         }
 
         reader.BaseStream.AdvancePosition(2); // version made by
@@ -124,22 +125,22 @@ internal record class AbridgedCentralDirectoryEntry
     {
         if (_minVersionExtract > 45)
         {
-            throw new InvalidDataException("ISO/IEC 21320: \"version needed to extract\" shall not be greater than 45.");
+            ThrowHelper.ThrowInvalidDataException("ISO/IEC 21320: \"version needed to extract\" shall not be greater than 45.");
         }
 
         if ((_bitFlag & BitFlag.Unsupported) != 0)
         {
-            throw new InvalidDataException("ISO/IEC 21320: Bit 0, bits 3 to 10 and 12 to 15 of the general purpose bit flag, shall not be set.");
+            ThrowHelper.ThrowInvalidDataException("ISO/IEC 21320: Bit 0, bits 3 to 10 and 12 to 15 of the general purpose bit flag, shall not be set.");
         }
 
         if (_diskNumberStart != 0)
         {
-            throw new InvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
+            ThrowHelper.ThrowInvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
         }
 
         if (CompressionMethod != 0 && CompressionMethod != 8)
         {
-            throw new InvalidDataException("ISO/IEC 21320: The compression method shall be either 0 (stored) or 8 (deflated).");
+            ThrowHelper.ThrowInvalidDataException("ISO/IEC 21320: The compression method shall be either 0 (stored) or 8 (deflated).");
         }
 
         return this;

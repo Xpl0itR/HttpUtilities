@@ -8,6 +8,7 @@ using System;
 using System.Buffers.Binary;
 using System.IO;
 using System.Text;
+using CommunityToolkit.Diagnostics;
 
 namespace HttpUtilities;
 
@@ -20,19 +21,12 @@ internal record ChunkMetadata
 
     internal ChunkMetadata(long totalLength, int numChunks)
     {
-        NumChunks = numChunks;
-        if (numChunks < 2)
-        {
-            throw new ArgumentOutOfRangeException(nameof(numChunks));
-        }
+        Guard.IsGreaterThanOrEqualTo(numChunks,   1,         nameof(numChunks));
+        Guard.IsGreaterThanOrEqualTo(totalLength, numChunks, nameof(totalLength));
 
-        _chunkLength = totalLength / numChunks;
-        if (_chunkLength <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(totalLength));
-        }
-
+        _chunkLength     = totalLength / numChunks;
         _lastChunkLength = _chunkLength + totalLength % _chunkLength;
+        NumChunks        = numChunks;
     }
 
     internal ChunkMetadata(Stream stream)
@@ -41,7 +35,7 @@ internal record ChunkMetadata
 
         if (reader.ReadUInt32() != Magic)
         {
-            throw new InvalidDataException();
+            ThrowHelper.ThrowInvalidDataException();
         }
 
         NumChunks        = reader.ReadInt32();
@@ -57,7 +51,7 @@ internal record ChunkMetadata
 
         BinaryPrimitives.WriteUInt32LittleEndian(buffer, Magic);
         BinaryPrimitives.WriteInt32LittleEndian(buffer.Slice(sizeof(uint)), NumChunks);
-        BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(sizeof(uint) + sizeof(int)),                _chunkLength);
+        BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(sizeof(uint) + sizeof(int)), _chunkLength);
         BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(sizeof(uint) + sizeof(int) + sizeof(long)), _chunkLength);
 
         stream.Write(buffer);
@@ -65,17 +59,15 @@ internal record ChunkMetadata
 
     internal long OffsetOf(int index)
     {
-        if (index < 0 || index >= _chunkLength)
-            throw new ArgumentOutOfRangeException(nameof(index));
-
+        Guard.IsBetween(index, -1, NumChunks, nameof(index));
         return index * _chunkLength;
     }
 
     internal long LengthOf(int index)
     {
-        if (index < 0 || index >= _chunkLength)
-            throw new ArgumentOutOfRangeException(nameof(index));
+        int lastIndex = NumChunks - 1;
 
-        return index == NumChunks - 1 ? _lastChunkLength : _chunkLength;
+        Guard.IsBetweenOrEqualTo(index, 0, lastIndex, nameof(index));
+        return index == lastIndex ? _lastChunkLength : _chunkLength;
     }
 }

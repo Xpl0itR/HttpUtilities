@@ -5,6 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 using System.IO;
+using CommunityToolkit.Diagnostics;
 
 namespace HttpUtilities.RemoteContainer;
 
@@ -32,14 +33,14 @@ internal readonly record struct AbridgedEocdRecord
         {
             if (reader.ReadUInt32() != 0)
             {
-                throw new InvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
+                ThrowHelper.ThrowInvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
             }
 
             Eocd64RecordOffset = reader.ReadUInt64();
 
             if (reader.ReadUInt32() != 1)
             {
-                throw new InvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
+                ThrowHelper.ThrowInvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
             }
         }
         else
@@ -50,15 +51,17 @@ internal readonly record struct AbridgedEocdRecord
 
         if (reader.ReadUInt32() != EocdSignature)
         {
-            throw new InvalidDataException("Signature mismatch. This is most likely because ZIP files with a comment longer than 0 bytes are not supported.");
+            ThrowHelper.ThrowInvalidDataException("Signature mismatch. This is most likely because ZIP files with a comment longer than 0 bytes are not supported.");
         }
 
-        // number of this disk
-        // number of the disk with the start of the central directory
-        // total number of entries in the central directory on this disk
-        if (reader.ReadUInt16() + reader.ReadUInt16() != 0 || reader.ReadUInt16() != (EntryCount = reader.ReadUInt16()))
+        ushort diskNumber       = reader.ReadUInt16(); // number of this disk
+        ushort diskNumberWithCd = reader.ReadUInt16(); // number of the disk with the start of the central directory
+        ushort entryCountOnDisk = reader.ReadUInt16(); // total number of entries in the central directory on this disk
+        EntryCount              = reader.ReadUInt16();
+
+        if (diskNumber != 0 || diskNumberWithCd != 0 || entryCountOnDisk != EntryCount)
         {
-            throw new InvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
+            ThrowHelper.ThrowInvalidDataException("ISO/IEC 21320: Archives shall not be split or spanned.");
         }
 
         CentralDirLength = reader.ReadUInt32();

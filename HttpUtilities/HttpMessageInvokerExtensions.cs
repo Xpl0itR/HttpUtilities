@@ -11,6 +11,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
+using CommunityToolkit.Diagnostics;
 
 namespace HttpUtilities;
 
@@ -35,7 +36,7 @@ public static class HttpMessageInvokerExtensions
 
         if (!response.Headers.AcceptRanges.Contains("bytes"))
         {
-            throw new NotSupportedException("The requested resource does not support partial requests.");
+            ThrowHelper.ThrowNotSupportedException("The requested resource does not support partial requests.");
         }
 
         return response;
@@ -77,10 +78,8 @@ public static class HttpMessageInvokerExtensions
         HttpResponseMessage response = await SendAsync(httpMessageInvoker, request, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode != HttpStatusCode.PartialContent)
         {
-            throw new HttpRequestException(
-                $"Response body status code was expected to be {HttpStatusCode.PartialContent} but was {response.StatusCode} instead.",
-                null,
-                response.StatusCode);
+            ThrowHttpRequestException(response.StatusCode,
+                                      $"Response body status code was expected to be {HttpStatusCode.PartialContent} but was {response.StatusCode} instead.");
         }
 
         Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -107,11 +106,7 @@ public static class HttpMessageInvokerExtensions
     /// <exception cref="ArgumentOutOfRangeException"></exception>
     public static Task<Stream> GetChunkAsync(this HttpMessageInvoker httpMessageInvoker, Uri? uri, EntityTagHeaderValue? eTag, long offset, long length, CancellationToken cancellationToken)
     {
-        if (length < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(length));
-        }
-
+        Guard.IsGreaterThanOrEqualTo(length, 1, nameof(length));
         return GetRangeAsync(httpMessageInvoker, uri, eTag, offset, offset + length - 1, cancellationToken);
     }
 
@@ -200,4 +195,8 @@ public static class HttpMessageInvokerExtensions
         httpMessageInvoker is HttpClient httpClient
             ? httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             : httpMessageInvoker.SendAsync(request, cancellationToken);
+
+    [System.Diagnostics.CodeAnalysis.DoesNotReturn]
+    private static void ThrowHttpRequestException(HttpStatusCode statusCode, string message) =>
+        throw new HttpRequestException(message, null, statusCode);
 }

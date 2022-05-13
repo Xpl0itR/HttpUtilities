@@ -52,7 +52,7 @@ public static class StreamExtensions
                 while (offset < toRead)
                 {
                     if ((read = await stream.ReadAsync(buffer, offset, toRead - offset, cancellationToken).ConfigureAwait(false)) == 0)
-                        throw new EndOfStreamException();
+                        ThrowEndOfStreamException();
 
                     offset += read;
                 }
@@ -97,7 +97,7 @@ public static class StreamExtensions
             {
                 int skipped = stream.Read(buffer, 0, count <= buffer.Length ? count : buffer.Length);
                 if (skipped == 0)
-                    throw new EndOfStreamException();
+                    ThrowEndOfStreamException();
 
                 count -= skipped;
             }
@@ -107,4 +107,8 @@ public static class StreamExtensions
             ArrayPool<byte>.Shared.Return(buffer);
         }
     }
+
+    [System.Diagnostics.CodeAnalysis.DoesNotReturn]
+    private static void ThrowEndOfStreamException() =>
+        throw new EndOfStreamException();
 }
