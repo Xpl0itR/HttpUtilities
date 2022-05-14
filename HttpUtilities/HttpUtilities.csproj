@@ -3,7 +3,7 @@
   <PropertyGroup>
     <Authors>Xpl0itR</Authors>
     <Copyright>Copyright © 2021-2022 Xpl0itR</Copyright>
-    <Description>HttpUtilities is a library used for sending HTTP range requests and other utilities based on this, written in C# 10, targeting .NET 6.0.</Description>
+    <Description>HttpUtilities is a library used for sending HTTP range requests and other utilities based on this, written in C# 10, targeting .NET 6.0 and .NET Standard 2.1.</Description>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -18,7 +18,7 @@
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFrameworks>net6.0;netstandard2.1</TargetFrameworks>
     <VersionPrefix>1.0.1</VersionPrefix>
   </PropertyGroup>
 

@@ -5,10 +5,12 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Diagnostics;
@@ -82,7 +84,7 @@ public static class HttpMessageInvokerExtensions
                                       $"Response body status code was expected to be {HttpStatusCode.PartialContent} but was {response.StatusCode} instead.");
         }
 
-        Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        Stream stream = await ReadAsStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
         return stream.CanSeek // If stream is not seekable the length property is not set
             ? stream
             : new LengthStream(stream, response.Content.Headers.ContentLength);
@@ -196,7 +198,19 @@ public static class HttpMessageInvokerExtensions
             ? httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             : httpMessageInvoker.SendAsync(request, cancellationToken);
 
-    [System.Diagnostics.CodeAnalysis.DoesNotReturn]
+    [DoesNotReturn]
     private static void ThrowHttpRequestException(HttpStatusCode statusCode, string message) =>
+#if NET5_0_OR_GREATER
         throw new HttpRequestException(message, null, statusCode);
+#else
+        throw new HttpRequestException(message);
+#endif
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Task<Stream> ReadAsStreamAsync(HttpContent content, CancellationToken ct) =>
+#if NET5_0_OR_GREATER
+        content.ReadAsStreamAsync(ct);
+#else
+        content.ReadAsStreamAsync();
+#endif
 }

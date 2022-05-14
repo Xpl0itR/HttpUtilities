@@ -1,6 +1,6 @@
 HttpUtilities [![Build, Test and Release](https://github.com/Xpl0itR/HttpUtilities/actions/workflows/build_test_release.yml/badge.svg?branch=master)](https://github.com/Xpl0itR/HttpUtilities/actions/workflows/build_test_release.yml)
 =============
-HttpUtilities is a library used for sending [HTTP range requests](https://developer.mozilla.org/docs/Web/HTTP/Range_requests) and other utilities based on this, written in C# 10, targeting .NET 6.0.
+HttpUtilities is a library used for sending [HTTP range requests](https://developer.mozilla.org/docs/Web/HTTP/Range_requests) and other utilities based on this, written in C# 10, targeting .NET 6.0 and .NET Standard 2.1.
 
 Classes/Extension Methods
 -------------------------
