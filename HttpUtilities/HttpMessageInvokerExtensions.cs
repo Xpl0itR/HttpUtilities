@@ -11,6 +11,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Diagnostics;
@@ -28,12 +29,12 @@ public static class HttpMessageInvokerExtensions
     /// </summary>
     /// <param name="httpMessageInvoker">HTTP message invoker used to send requests.</param>
     /// <param name="uri">Uniform Resource Identifier of the resource to be requested.</param>
-    /// <param name="cancellationToken">A cancellation token to propagate notification that operations should be canceled.</param>
+    /// <param name="ct">A cancellation token to propagate notification that operations should be canceled.</param>
     /// <exception cref="NotSupportedException">The requested resource does not support partial requests.</exception>
-    public static async Task<HttpResponseMessage> HeadRangeAsync(this HttpMessageInvoker httpMessageInvoker, Uri? uri, CancellationToken cancellationToken)
+    public static async Task<HttpResponseMessage> HeadRangeAsync(this HttpMessageInvoker httpMessageInvoker, Uri? uri, CancellationToken ct)
     {
-        HttpRequestMessage  request  = new(HttpMethod.Head, uri);
-        HttpResponseMessage response = await SendAsync(httpMessageInvoker, request, cancellationToken).ConfigureAwait(false);
+        using HttpRequestMessage request  = new(HttpMethod.Head, uri);
+        HttpResponseMessage      response = await SendInternal(httpMessageInvoker, request, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         if (!response.Headers.AcceptRanges.Contains("bytes"))
@@ -64,12 +65,12 @@ public static class HttpMessageInvokerExtensions
     ///     A zero-based byte offset indicating the end of the requested range.
     ///     This value is optional and, if omitted, the end of the document is taken as the end of the range.
     /// </param>
-    /// <param name="cancellationToken">A cancellation token to propagate notification that operations should be canceled.</param>
+    /// <param name="ct">A cancellation token to propagate notification that operations should be canceled.</param>
     /// <returns>A <see cref="Stream" /> that represents the requested range of the resource.</returns>
     /// <exception cref="HttpRequestException"></exception>
-    public static async Task<Stream> GetRangeAsync(this HttpMessageInvoker httpMessageInvoker, Uri? uri, EntityTagHeaderValue? eTag, long? rangeStart, long? rangeEnd, CancellationToken cancellationToken)
+    public static async Task<Stream> GetRangeAsync(this HttpMessageInvoker httpMessageInvoker, Uri? uri, EntityTagHeaderValue? eTag, long? rangeStart, long? rangeEnd, CancellationToken ct)
     {
-        HttpRequestMessage request = new(HttpMethod.Get, uri);
+        using HttpRequestMessage request = new(HttpMethod.Get, uri);
         request.Headers.Range = new RangeHeaderValue(rangeStart, rangeEnd);
 
         if (eTag != null)
@@ -77,14 +78,14 @@ public static class HttpMessageInvokerExtensions
             request.Headers.IfMatch.Add(eTag);
         }
 
-        HttpResponseMessage response = await SendAsync(httpMessageInvoker, request, cancellationToken).ConfigureAwait(false);
+        HttpResponseMessage response = await SendInternal(httpMessageInvoker, request, ct).ConfigureAwait(false);
         if (response.StatusCode != HttpStatusCode.PartialContent)
         {
             ThrowHttpRequestException(response.StatusCode,
                                       $"Response body status code was expected to be {HttpStatusCode.PartialContent} but was {response.StatusCode} instead.");
         }
 
-        Stream stream = await ReadAsStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
+        Stream stream = await ReadAsStreamAsync(response.Content, ct).ConfigureAwait(false);
         return stream.CanSeek // If stream is not seekable the length property is not set
             ? stream
             : new LengthStream(stream, response.Content.Headers.ContentLength);
@@ -103,100 +104,34 @@ public static class HttpMessageInvokerExtensions
     /// </param>
     /// <param name="offset">A zero-based byte offset indicating the beginning of the requested range.</param>
     /// <param name="length">The number of bytes after the offset to request from the resource.</param>
-    /// <param name="cancellationToken">A cancellation token to propagate notification that operations should be canceled.</param>
+    /// <param name="ct">A cancellation token to propagate notification that operations should be canceled.</param>
     /// <returns>A <see cref="Stream" /> that represents the requested chunk of the resource.</returns>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
-    public static Task<Stream> GetChunkAsync(this HttpMessageInvoker httpMessageInvoker, Uri? uri, EntityTagHeaderValue? eTag, long offset, long length, CancellationToken cancellationToken)
+    public static Task<Stream> GetChunkAsync(this HttpMessageInvoker httpMessageInvoker, Uri? uri, EntityTagHeaderValue? eTag, long offset, long length, CancellationToken ct)
     {
         Guard.IsGreaterThanOrEqualTo(length, 1, nameof(length));
-        return GetRangeAsync(httpMessageInvoker, uri, eTag, offset, offset + length - 1, cancellationToken);
+        return GetRangeAsync(httpMessageInvoker, uri, eTag, offset, offset + length - 1, ct);
     }
 
-    /// <summary>
-    ///     Downloads a resource by splitting it into <paramref name="numConnections" /> chunks and downloading each chunk on a
-    ///     separate connection.
-    /// </summary>
-    /// <param name="httpMessageInvoker">HTTP message invoker used to send requests.</param>
-    /// <param name="uri">Uniform Resource Identifier of the resource to be download.</param>
-    /// <param name="outPath">The path where the resource will be written.</param>
-    /// <param name="numConnections">
-    ///     The number of concurrent connections used to download the resource. Must be greater than
-    ///     1.
-    /// </param>
-    /// <param name="cancellationToken">A cancellation token to propagate notification that operations should be canceled.</param>
-    /// <exception cref="IOException">The specified file already exists.</exception>
-    public static async Task<FileStream> MultiConnectionDownload(this HttpMessageInvoker httpMessageInvoker, Uri? uri, string outPath, int numConnections, CancellationToken cancellationToken)
+    /// TODO: write docs
+    public static async Task ReadRangeAsync(this HttpMessageInvoker httpMessageInvoker, Memory<byte> buffer, Uri? uri, EntityTagHeaderValue? eTag, long? rangeStart, long? rangeEnd, CancellationToken ct)
     {
-        HttpResponseMessage response = await httpMessageInvoker.HeadRangeAsync(uri, cancellationToken).ConfigureAwait(false);
-        long                fileSize = response.Content.Headers.ContentLength!.Value;
-
-        FileStream    outStream = new(outPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite, StreamExtensions.DefaultBufferSize, FileOptions.Asynchronous);
-        ChunkMetadata chunkMetadata;
-
-        if (outStream.Length == 0)
-        {
-            chunkMetadata = new ChunkMetadata(fileSize, numConnections);
-            outStream.Seek(fileSize, SeekOrigin.Begin);
-            chunkMetadata.WriteTo(outStream);
-
-            // Flushing will cause the OS to not only write the data we've written, but also fill the skipped bytes with 0s,
-            // which can take a long time. TODO: possibly optimize by using sparse files
-            await outStream.FlushAsync(cancellationToken).ConfigureAwait(false);
-        }
-        else if (outStream.Length > fileSize)
-        {
-            outStream.Seek(fileSize, SeekOrigin.Begin);
-            chunkMetadata = new ChunkMetadata(outStream);
-        }
-        else
-        {
-            throw new IOException($"The file '{outPath}' already exists.");
-        }
-
-        using SemaphoreSlim semaphore = new(numConnections);
-        Task[] tasks = new Task[chunkMetadata.NumChunks];
-
-        for (int i = 0; i < chunkMetadata.NumChunks; i++)
-        {
-            tasks[i] = DownloadChunk(httpMessageInvoker, uri, response.Headers.ETag, chunkMetadata.OffsetOf(i), chunkMetadata.LengthOf(i), outPath, semaphore, cancellationToken);
-        }
-
-        await Task.WhenAll(tasks);
-
-        outStream.SetLength(fileSize);
-        return outStream;
+        await using Stream stream = await GetRangeAsync(httpMessageInvoker, uri, eTag, rangeStart, rangeEnd, ct).ConfigureAwait(false);
+        await stream.ReadCompletely(buffer, ct).ConfigureAwait(false);
     }
 
-    private static async Task DownloadChunk(HttpMessageInvoker httpMessageInvoker, Uri? uri, EntityTagHeaderValue? eTag, long offset, long length, string outPath, SemaphoreSlim semaphore, CancellationToken cancellationToken)
-    {
-        await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+    /// TODO: write docs
+    public static Task ReadChunkAsync(this HttpMessageInvoker httpMessageInvoker, Memory<byte> buffer, Uri? uri, EntityTagHeaderValue? eTag, long offset, CancellationToken ct) =>
+        ReadRangeAsync(httpMessageInvoker, buffer, uri, eTag, offset, offset + buffer.Length - 1, ct);
 
-        try
-        {
-            await using FileStream oChunkStream = new(outPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite, StreamExtensions.DefaultBufferSize, FileOptions.Asynchronous)
-            {
-                Position = offset + length
-            };
+    /// TODO: write docs
+    public static Task ReadChunkFromEndAsync(this HttpMessageInvoker httpMessageInvoker, Memory<byte> buffer, Uri? uri, EntityTagHeaderValue? eTag, CancellationToken ct) =>
+        ReadRangeAsync(httpMessageInvoker, buffer, uri, eTag, null, buffer.Length, ct);
 
-            await oChunkStream.SeekBackToNonZero(length, cancellationToken).ConfigureAwait(false);
-
-            long bytesAlreadyWritten = oChunkStream.Position - offset;
-            if (bytesAlreadyWritten == length)
-                return;
-
-            await using Stream iChunkStream = await httpMessageInvoker.GetChunkAsync(uri, eTag, offset + bytesAlreadyWritten, length - bytesAlreadyWritten, cancellationToken).ConfigureAwait(false);
-            await iChunkStream.CopyToAsync(oChunkStream, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            semaphore.Release();
-        }
-    }
-
-    private static Task<HttpResponseMessage> SendAsync(HttpMessageInvoker httpMessageInvoker, HttpRequestMessage request, CancellationToken cancellationToken) =>
+    private static Task<HttpResponseMessage> SendInternal(HttpMessageInvoker httpMessageInvoker, HttpRequestMessage request, CancellationToken ct) =>
         httpMessageInvoker is HttpClient httpClient
-            ? httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            : httpMessageInvoker.SendAsync(request, cancellationToken);
+            ? httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
+            : httpMessageInvoker.SendAsync(request, ct);
 
     [DoesNotReturn]
     private static void ThrowHttpRequestException(HttpStatusCode statusCode, string message) =>
@@ -213,4 +148,89 @@ public static class HttpMessageInvokerExtensions
 #else
         content.ReadAsStreamAsync();
 #endif
+
+    /// <summary>
+    ///     Downloads a resource by splitting it into <paramref name="numConnections" /> chunks and downloading each chunk on a
+    ///     separate connection.
+    /// </summary>
+    /// <param name="httpMessageInvoker">HTTP message invoker used to send requests.</param>
+    /// <param name="uri">Uniform Resource Identifier of the resource to be download.</param>
+    /// <param name="outPath">The path where the resource will be written.</param>
+    /// <param name="numConnections">
+    ///     The number of concurrent connections used to download the resource. Must be greater than
+    ///     1.
+    /// </param>
+    /// <param name="ct">A cancellation token to propagate notification that operations should be canceled.</param>
+    /// <exception cref="IOException">The specified file already exists.</exception>
+    public static async Task<FileStream> MultiConnectionDownload(this HttpMessageInvoker httpMessageInvoker, Uri? uri, string outPath, int numConnections, CancellationToken ct)
+    {
+        using HttpResponseMessage response = await httpMessageInvoker.HeadRangeAsync(uri, ct).ConfigureAwait(false);
+        long                      fileSize = response.Content.Headers.ContentLength!.Value;
+
+        FileStream    outStream = new(outPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite, StreamExtensions.DefaultBufferSize, FileOptions.Asynchronous);
+        ChunkMetadata chunkMetadata;
+
+        if (outStream.Length == 0)
+        {
+            chunkMetadata = new ChunkMetadata(fileSize, numConnections);
+            outStream.Seek(fileSize, SeekOrigin.Begin);
+            outStream.Write(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<ChunkMetadata, byte>(ref chunkMetadata), ChunkMetadata.Length));
+
+            // Flushing will cause the OS to not only write the data we've written, but also fill the skipped bytes with 0s,
+            // which can take a long time. TODO: possibly optimize by using sparse files
+            await outStream.FlushAsync(ct).ConfigureAwait(false);
+        }
+        else if (outStream.Length > fileSize)
+        {
+            byte[] metaBuffer = new byte[ChunkMetadata.Length];
+
+            outStream.Seek(fileSize, SeekOrigin.Begin);
+            await outStream.ReadCompletely(metaBuffer, ct);
+
+            chunkMetadata = Unsafe.As<byte, ChunkMetadata>(ref metaBuffer[0]).ThrowIfInvalid();
+        }
+        else
+        {
+            throw new IOException($"The file '{outPath}' already exists.");
+        }
+
+        using SemaphoreSlim semaphore = new(numConnections);
+        Task[] tasks = new Task[chunkMetadata.NumChunks];
+
+        for (int i = 0; i < chunkMetadata.NumChunks; i++)
+        {
+            tasks[i] = DownloadChunk(httpMessageInvoker, uri, response.Headers.ETag, chunkMetadata.OffsetOf(i), chunkMetadata.LengthOf(i), outPath, semaphore, ct);
+        }
+
+        await Task.WhenAll(tasks);
+
+        outStream.SetLength(fileSize);
+        return outStream;
+    }
+
+    private static async Task DownloadChunk(HttpMessageInvoker httpMessageInvoker, Uri? uri, EntityTagHeaderValue? eTag, long offset, long length, string outPath, SemaphoreSlim semaphore, CancellationToken ct)
+    {
+        await semaphore.WaitAsync(ct).ConfigureAwait(false);
+
+        try
+        {
+            await using FileStream oChunkStream = new(outPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite, StreamExtensions.DefaultBufferSize, FileOptions.Asynchronous)
+            {
+                Position = offset + length
+            };
+
+            await oChunkStream.SeekBackToNonZero(length, ct).ConfigureAwait(false);
+
+            long bytesAlreadyWritten = oChunkStream.Position - offset;
+            if (bytesAlreadyWritten == length)
+                return;
+
+            await using Stream iChunkStream = await httpMessageInvoker.GetChunkAsync(uri, eTag, offset + bytesAlreadyWritten, length - bytesAlreadyWritten, ct).ConfigureAwait(false);
+            await iChunkStream.CopyToAsync(oChunkStream, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
 }

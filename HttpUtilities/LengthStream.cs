@@ -106,8 +106,8 @@ public class LengthStream : Stream
         _stream.CopyTo(destination, bufferSize);
 
     /// <inheritdoc />
-    public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) =>
-        _stream.CopyToAsync(destination, bufferSize, cancellationToken);
+    public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken ct) =>
+        _stream.CopyToAsync(destination, bufferSize, ct);
 
     /// <inheritdoc />
     public override ValueTask DisposeAsync() =>
@@ -127,8 +127,8 @@ public class LengthStream : Stream
         _stream.Flush();
 
     /// <inheritdoc />
-    public override Task FlushAsync(CancellationToken cancellationToken) =>
-        _stream.FlushAsync(cancellationToken);
+    public override Task FlushAsync(CancellationToken ct) =>
+        _stream.FlushAsync(ct);
 
     /// <summary>
     ///     Reads a sequence of bytes from the current stream and advances the position within the stream by the number of
@@ -169,12 +169,12 @@ public class LengthStream : Stream
         _stream.Read(buffer);
 
     /// <inheritdoc />
-    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-        _stream.ReadAsync(buffer, offset, count, cancellationToken);
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct) =>
+        _stream.ReadAsync(buffer, offset, count, ct);
 
     /// <inheritdoc />
-    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
-        _stream.ReadAsync(buffer, cancellationToken);
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default) =>
+        _stream.ReadAsync(buffer, ct);
 
     /// <inheritdoc />
     public override int ReadByte() =>
@@ -244,12 +244,12 @@ public class LengthStream : Stream
         _stream.Write(buffer);
 
     /// <inheritdoc />
-    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-        _stream.WriteAsync(buffer, offset, count, cancellationToken);
+    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken ct) =>
+        _stream.WriteAsync(buffer, offset, count, ct);
 
     /// <inheritdoc />
-    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
-        _stream.WriteAsync(buffer, cancellationToken);
+    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default) =>
+        _stream.WriteAsync(buffer, ct);
 
     /// <inheritdoc />
     public override void WriteByte(byte value) =>

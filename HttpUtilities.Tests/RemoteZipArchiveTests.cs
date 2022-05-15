@@ -11,8 +11,6 @@ namespace HttpUtilities.Tests;
 
 public class RemoteZipArchiveTests : IDisposable
 {
-    private const string FolderName         = "folder/";
-    private const string EmptyFileName      = "0";
     private const string SampleFileName     = "866-536x354.jpg";
     private const string SampleHash         = "AC271DE883FAA03617B212BEEDA73DB3";
     private const string SampleUrlZip       = "https://testserver.xpl0itr.repl.co/sample.zip";
@@ -31,24 +29,24 @@ public class RemoteZipArchiveTests : IDisposable
 
     [Theory, InlineData(SampleUrlZip), InlineData(SampleUrlZip64)]
     public async Task TestGetZipCentralDirectory(string url) =>
-        await RemoteZipArchive.New(_httpClient, url, CancellationToken.None, true);
+        await RemoteZipArchive.New(_httpClient, url, CancellationToken.None, false);
 
     [Theory, InlineData(SampleUrlZipLzma), InlineData(SampleUrlZipCrypto), InlineData(SampleUrlZipSplit)]
-    public async Task TestGetFileUnsupported(string url)
-    {
+    public async Task TestGetFileUnsupported(string url) =>
         await Assert.ThrowsAsync<InvalidDataException>(async () =>
         {
             using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, url, CancellationToken.None, true);
-            await remoteZip.OpenFile(SampleFileName, CancellationToken.None);
+            CentralDirectoryEntry  fileEntry = remoteZip.CentralDirectory[SampleFileName];
+            await remoteZip.OpenFile(fileEntry, CancellationToken.None);
         });
-    }
 
     [Theory, InlineData(SampleUrlZip), InlineData(SampleUrlZip64)]
     public async Task TestGetFile(string url)
     {
         using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, url, CancellationToken.None, true);
+        CentralDirectoryEntry  fileEntry = remoteZip.CentralDirectory[SampleFileName];
 
-        await using Stream zipStream = await remoteZip.OpenFile(SampleFileName, CancellationToken.None);
+        await using Stream zipStream = await remoteZip.OpenFile(fileEntry, CancellationToken.None);
         await using Stream memStream = new MemoryStream();
         await zipStream.CopyToAsync(memStream, CancellationToken.None);
 
@@ -57,14 +55,5 @@ public class RemoteZipArchiveTests : IDisposable
         byte[] hash = await hashAlg.ComputeHashAsync(memStream, CancellationToken.None);
 
         Assert.Equal(SampleHash, Convert.ToHexString(hash));
-    }
-
-    [Theory, InlineData(EmptyFileName), InlineData(FolderName)]
-    public async Task TestGetEmpty(string fileName)
-    {
-        using RemoteZipArchive remoteZip = await RemoteZipArchive.New(_httpClient, SampleUrlZip, CancellationToken.None, true);
-        await using Stream     zipStream = await remoteZip.OpenFile(fileName, CancellationToken.None);
-
-        Assert.Equal(Stream.Null, zipStream);
     }
 }
